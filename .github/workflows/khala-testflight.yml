@@ -42,7 +42,7 @@ on:
         default: ''
 
 concurrency:
-  group: khala-testflight
+  group: khala-testflight-${{ github.ref_name }}
   cancel-in-progress: true
 
 permissions:
