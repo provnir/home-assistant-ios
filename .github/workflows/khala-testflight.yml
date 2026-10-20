@@ -6,6 +6,7 @@
 # - macOS only for archive/export. Validation, App Store Connect checks and the TestFlight
 #   upload run on Ubuntu. No simulators, no tests on macOS.
 # - No unneeded storage: the signed IPA is the only artifact, kept 1 day, deleted after upload.
+#   The one cache is the Swift package directory (approved by Nir 10-20); never DerivedData.
 # - Keep the file name: github.run_number feeds CFBundleVersion (run.attempt), and a renamed
 #   workflow restarts the counter.
 # Billing: the fork is public, and standard GitHub-hosted runners (xcode-27 included) cost no
@@ -173,9 +174,24 @@ jobs:
                 echo '::error::this Xcode is a beta; App Store Connect rejects uploads built with it'; exit 1
               fi ;;
           esac
+      - name: Restore cached Swift packages
+        # Only the Swift package checkouts/artifacts (archive.sh passes this directory as
+        # -clonedSourcePackagesDirPath). DerivedData is deliberately not cached. Nir approved
+        # caching 10-20 (free on a public repo, 10 GB per repo, LRU-evicted). Saved at job end
+        # only when the job succeeds and the exact key missed.
+        id: spm
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/SourcePackages
+          key: khala-spm-${{ runner.os }}-${{ runner.arch }}-xcode${{ inputs.xcode }}-${{ hashFiles('HomeAssistant.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            khala-spm-${{ runner.os }}-${{ runner.arch }}-xcode${{ inputs.xcode }}-
       - name: Archive, export and verify the signature
         id: build
         env:
+          SPM_DIR: ${{ runner.temp }}/SourcePackages
+          SPM_CACHE_HIT: ${{ steps.spm.outputs.cache-hit }}
+          SPM_CACHE_MATCHED_KEY: ${{ steps.spm.outputs.cache-matched-key }}
           APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_PRIVATE_KEY: ${{ inputs.signing == 'cloud' && secrets.APP_STORE_CONNECT_PRIVATE_KEY || '' }}

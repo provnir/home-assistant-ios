@@ -64,10 +64,27 @@ elif [[ "$SIGNING" == cloud ]]; then
           -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID")
 fi
 
+# Swift packages live in a fixed directory the workflow caches (actions/cache, keyed on OS, arch,
+# Xcode and Package.resolved); DerivedData is not cached. Resolution is timed on its own so the
+# job summary shows what the cache saves. Export reads no packages, so it does not get the flag.
+SPM_DIR="${SPM_DIR:-$RUNNER_TEMP/SourcePackages}"
+spm=(-clonedSourcePackagesDirPath "$SPM_DIR")
+started=$(date +%s)
+xcodebuild -resolvePackageDependencies -project HomeAssistant.xcodeproj -scheme App-Release \
+    "${spm[@]}" -skipPackagePluginValidation -skipMacroValidation \
+    | xcbeautify --renderer github-actions
+resolve_seconds=$(( $(date +%s) - started ))
+case "${SPM_CACHE_HIT:-}" in
+    true) cache_state="exact hit" ;;
+    false) cache_state="partial hit (${SPM_CACHE_MATCHED_KEY:-restore key})" ;;
+    *) cache_state="miss" ;;
+esac
+echo "- Swift packages: cache $cache_state; resolution took ${resolve_seconds}s ($(du -sh "$SPM_DIR" | cut -f1) in $SPM_DIR)." >> "$GITHUB_STEP_SUMMARY"
+
 ARCHIVE="$RUNNER_TEMP/Khala.xcarchive"
 xcodebuild archive -project HomeAssistant.xcodeproj -scheme App-Release -configuration Release \
     -destination 'generic/platform=iOS' -archivePath "$ARCHIVE" \
-    -derivedDataPath "$RUNNER_TEMP/DerivedData" -xcconfig "$RUNNER_TEMP/khala.xcconfig" \
+    -derivedDataPath "$RUNNER_TEMP/DerivedData" -xcconfig "$RUNNER_TEMP/khala.xcconfig" "${spm[@]}" \
     -skipPackagePluginValidation -skipMacroValidation ${auth[@]+"${auth[@]}"} \
     | xcbeautify --renderer github-actions
 
