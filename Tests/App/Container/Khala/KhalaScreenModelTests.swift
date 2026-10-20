@@ -38,6 +38,15 @@ struct KhalaCarLayoutTests {
         let sentry = layout.overview[1]
         #expect(sentry.call?.service == "turn_off")
         #expect(layout.overview.first { $0.title == "Flash lights" }?.call?.service == "press")
+        #expect(layout.moreControls.map(\.title) == ["Homelink", "Play sound"])
+        #expect(layout.mediaPlayerId == "media_player.rover_media_player")
+        #expect(layout.needsWake)
+    }
+
+    @Test func carMediaStaysOnTheCar() {
+        let devices = KhalaDeviceCatalog.build(entities: KhalaScreenFixtures.car, assignments: [])
+        #expect(devices.map(\.category) == [.car])
+        #expect(devices.first?.memberEntityIds.contains("media_player.rover_media_player") == true)
     }
 
     @Test func frunkThatOnlyOpensHasNoActionOnceOpen() throws {

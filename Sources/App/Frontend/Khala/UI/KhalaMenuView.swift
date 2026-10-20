@@ -87,7 +87,7 @@ struct KhalaMenuView: View {
                             symbol: KhalaTheme.symbol(item),
                             symbolColor: item == .cameras ? KhalaTheme.accent(.security) : KhalaTheme.ink,
                             trailing: trailing(for: item),
-                            isSelected: item == destination
+                            isSelected: item == destination.menuHighlight
                         ) {
                             onSelect(item)
                         }
@@ -152,7 +152,7 @@ struct KhalaMenuView: View {
         switch destination {
         case .cameras: return cameraCount > 0 ? "\(cameraCount)" : nil
         case .automations: return automationCount > 0 ? "\(automationCount)" : nil
-        case .today, .dashboards: return nil
+        case .today, .dashboards, .camera, .device, .entity: return nil
         }
     }
 }

@@ -22,6 +22,11 @@ final class KhalaShellModel: ObservableObject {
         }
     }
 
+    /// Routing (`KhalaShellModel+Routing`): where a device/camera screen's back button returns, and the media
+    /// sheet on display.
+    @Published var returnDestination: KhalaDestination = .today
+    @Published var sheet: KhalaSheetRequest?
+
     /// The web frontend is up (connected or loaded), so its header — with the menu button `KhalaShell`'s script
     /// keeps there — is on screen. While it isn't (loading, offline), the shell's own edge swipe stands in.
     @Published private(set) var isFrontendReady = false

@@ -93,7 +93,8 @@ enum KhalaTheme {
     static func symbol(_ destination: KhalaDestination) -> SFSymbol {
         switch destination {
         case .today: return .textAlignleft
-        case .cameras: return .video
+        case .cameras, .camera: return .video
+        case .device, .entity: return .powerplug
         case .automations: return .wandAndStars
         case .dashboards: return .squareGrid2x2
         }

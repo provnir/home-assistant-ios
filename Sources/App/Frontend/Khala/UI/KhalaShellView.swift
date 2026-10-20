@@ -82,6 +82,17 @@ struct KhalaShellView: View {
                 menu
                     .frame(width: openWidth)
                     .accessibilityHidden(!shell.isMenuOpen)
+                    // The media sheet (theater, speakers, a car's player) hangs off the menu, which is always
+                    // mounted, so it opens over any screen — the web UI included.
+                    .sheet(item: $shell.sheet) { request in
+                        KhalaMediaSheet(
+                            entityId: request.entityId,
+                            name: home.devices.first { $0.id == request.deviceId }?.name,
+                            live: home.live,
+                            actions: KhalaScreenActions(server: server),
+                            onClose: { shell.sheet = nil }
+                        )
+                    }
 
                 // The card's edge shadow, on a plain shape so the moving card itself is never shadowed.
                 cardShape
@@ -138,7 +149,7 @@ struct KhalaShellView: View {
             },
             onDevice: { device in
                 withAnimation(settleAnimation) {
-                    shell.openMoreInfo(entityId: device.primaryEntityId)
+                    shell.route(KhalaRouting.target(for: device, cameras: home.cameras))
                 }
             },
             onEditDevices: { showsDeviceSettings = true },
@@ -227,13 +238,17 @@ struct KhalaShellView: View {
                     searchFocusRequest += 1
                 },
                 onItem: { handle($0) },
-                onDevice: { device in shell.openMoreInfo(entityId: device.primaryEntityId) }
+                onDevice: { device in shell.route(KhalaRouting.target(for: device, cameras: home.cameras)) }
             )
         case .cameras:
             KhalaCamerasView(
                 cameras: home.cameras,
+                live: home.live,
+                actions: KhalaScreenActions(server: server),
+                now: home.now,
+                calendar: home.calendar,
                 onMenu: { settle(open: true) },
-                onCamera: { camera in shell.openCamera(entityId: camera.entityId, name: camera.name) }
+                onCamera: { entityId in shell.show(.camera(entityId: entityId)) }
             )
         case .automations:
             KhalaPlaceholderView(
@@ -245,6 +260,8 @@ struct KhalaShellView: View {
             )
         case .dashboards:
             EmptyView()
+        case .camera, .device, .entity:
+            KhalaDetailScreen(destination: shell.destination, server: server, home: home, live: home.live, shell: shell)
         }
     }
 
@@ -253,19 +270,24 @@ struct KhalaShellView: View {
     private func handle(_ item: KhalaTimelineItem) {
         switch item.kind {
         case let .detection(eventEntityId, cameraEntityId):
-            if let cameraEntityId {
-                let name = home.cameras.first { $0.entityId == cameraEntityId }?.name
-                shell.openCamera(entityId: cameraEntityId, name: name)
-            } else {
-                shell.openMoreInfo(entityId: eventEntityId)
-            }
+            route(entityId: cameraEntityId ?? eventEntityId)
         case .scheduled, .timestamp:
             if let target = item.targetEntityId {
-                shell.openMoreInfo(entityId: target)
+                route(entityId: target)
             }
         case .sunrise, .sunset, .now:
             break
         }
+    }
+
+    /// Every tap lands on a native screen (`KhalaRouting`); the web UI only shows under Dashboards.
+    private func route(entityId: String) {
+        shell.route(KhalaRouting.target(
+            forEntityId: entityId,
+            entities: home.live.entities,
+            devices: home.devices,
+            automationConfigs: home.live.automationConfigs
+        ))
     }
 
     // MARK: - Drawer motion

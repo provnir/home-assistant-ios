@@ -35,6 +35,10 @@ struct KhalaCarLayout: Equatable {
     /// Nil when the car reports no connectivity.
     var isAwake: Bool?
     var overview: [KhalaControl] = []
+    /// Buttons Khala has no glyph for (homelink, keyless driving, novelty sounds...): tucked under one "More" tile.
+    var moreControls: [KhalaControl] = []
+    /// The car's own media player, opened in the media sheet from the car screen (never a home media device).
+    var mediaPlayerId: String?
     var climate: Climate?
     var climateControls: [KhalaControl] = []
     var insideTemperature: Double?
@@ -125,6 +129,7 @@ struct KhalaCarLayout: Equatable {
         // Controls, by tab.
         let mainLock = visible.first { $0.domain == "lock" && !has($0, "cable", "charg") }
         var overview: [KhalaControl] = []
+        var more: [KhalaControl] = []
         var climateControls: [KhalaControl] = []
         var chargingControls: [KhalaControl] = []
         for entity in visible {
@@ -143,14 +148,22 @@ struct KhalaCarLayout: Equatable {
                 chargingControls.append(control)
             } else if entity.domain == "select" {
                 climateControls.append(control)
+            } else if entity.domain == "button", control.glyph == .button {
+                more.append(control)
             } else {
                 overview.append(control)
             }
         }
         self.overview = overview.sorted(by: Self.tileOrder)
+        self.moreControls = more.sorted(by: Self.tileOrder)
+        self.mediaPlayerId = visible.first { $0.domain == "media_player" }?.entityId
         self.climateControls = climateControls.sorted(by: Self.tileOrder)
         self.chargingControls = chargingControls.sorted(by: Self.tileOrder)
     }
+
+    /// Whether a command should wake the car first: it reports being asleep and has a wake button. Khala never
+    /// wakes a car just because its screen opened.
+    var needsWake: Bool { isAwake == false && wakeButtonId != nil }
 
     /// The car's place in words: "At home", "Away", a zone name.
     var placeText: String? {

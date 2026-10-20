@@ -114,7 +114,8 @@ enum KhalaCameraCatalog {
         deviceClass == "motion" || deviceClass == "doorbell"
     }
 
-    private static func sourceName(_ event: KhalaEntity, camera: KhalaEntity) -> String {
+    /// An event entity's name without its camera's ("Field detection").
+    static func sourceName(_ event: KhalaEntity, camera: KhalaEntity) -> String {
         if event.deviceName != nil { return event.nameWithoutDevice }
         guard event.name.hasPrefix(camera.name + " ") else { return event.name }
         return String(event.name.dropFirst(camera.name.count + 1))

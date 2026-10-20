@@ -9,7 +9,7 @@ enum KhalaRouting {
     static func target(for device: KhalaDevice, cameras: [KhalaEntity]) -> KhalaRouteTarget {
         switch device.category {
         case .media:
-            return .mediaSheet(deviceId: device.id)
+            return .mediaSheet(deviceId: device.id, entityId: device.primaryEntityId)
         case .security:
             // A pinned camera-side entity: its camera if the device has one.
             if let camera = cameras.first(where: { device.memberEntityIds.contains($0.entityId) }) {

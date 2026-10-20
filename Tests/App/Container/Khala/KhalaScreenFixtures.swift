@@ -66,6 +66,10 @@ enum KhalaScreenFixtures {
             car("button.rover_wake", "unknown", ["friendly_name": "Rover Wake"]),
             car("button.rover_flash_lights", "unknown", ["friendly_name": "Rover Flash lights"]),
             car("button.rover_honk_horn", "unknown", ["friendly_name": "Rover Honk horn"]),
+            car("button.rover_homelink", "unknown", ["friendly_name": "Rover Homelink"]),
+            car("button.rover_play_sound", "unknown", ["friendly_name": "Rover Play sound"]),
+            car("media_player.rover_media_player", "paused", ["device_class": "speaker", "friendly_name": "Rover Media player",
+                                                              "supported_features": 16437, "volume_level": 0.25]),
             car("select.rover_seat_heater_front_left", "off", ["friendly_name": "Rover Seat heater front left"]),
             car("update.rover_update", "off", ["friendly_name": "Rover Update"], auxiliary: true),
         ]

@@ -112,7 +112,7 @@ struct KhalaRoutingTests {
         #expect(target("event.porch_field_detection") == .screen(.camera(entityId: "camera.porch")))
         #expect(target("sensor.rover_battery_level") == .screen(.device(id: "dev-rover")))
         #expect(target("sensor.rover_time_to_full_charge") == .screen(.device(id: "dev-rover")))
-        #expect(target("media_player.den_receiver") == .mediaSheet(deviceId: "dev-den"))
+        #expect(target("media_player.den_receiver") == .mediaSheet(deviceId: "dev-den", entityId: "media_player.den_receiver"))
         #expect(target("switch.relay_7") == .screen(.device(id: "dev-relay")))
         #expect(target("weather.home") == .screen(.entity(entityId: "weather.home")))
     }
@@ -139,5 +139,20 @@ struct KhalaRoutingTests {
         #expect(KhalaDestination.device(id: "x").menuHighlight == nil)
         #expect(!KhalaDestination.entity(entityId: "x").isMenuDestination)
         #expect(KhalaDestination.today.isMenuDestination)
+    }
+}
+
+struct KhalaAttributeTextTests {
+    @Test func tokensAndBookkeepingNeverShow() {
+        let rows = KhalaAttributeText.rows([
+            "access_token": "secret", "entity_picture": "/api/camera_proxy/camera.a?token=secret",
+            "friendly_name": "A", "supported_features": 2, "brand": "Acme", "frontend_stream_type": NSNull(),
+            "motion_detection": true, "sources": ["One", "Two"], "nested": ["a": 1],
+        ])
+        #expect(rows == [
+            KhalaAttributeRow(key: "Brand", value: "Acme"),
+            KhalaAttributeRow(key: "Motion detection", value: "Yes"),
+            KhalaAttributeRow(key: "Sources", value: "One, Two"),
+        ])
     }
 }

@@ -5,6 +5,7 @@ import Foundation
 enum KhalaScreenText {
     static let back = "Back"
     static let more = "More"
+    static let media = "Media"
     static let close = "Close"
     static let clear = "Clear"
     static let clearToday = "All clear today"
@@ -29,6 +30,7 @@ enum KhalaScreenText {
     static let lastChanged = "Last changed"
     static let detectionSources = "Detection sources"
     static let attributes = "Attributes"
+    static let model = "Model"
     static let saveSnapshot = "Share snapshot"
     static let snapshotFailed = "Couldn't get a snapshot from Home Assistant."
 
@@ -68,6 +70,7 @@ enum KhalaScreenText {
     static let noSchedule = "No automation runs this device on a clock."
     static let noHistory = "Not on in the last 7 days."
     static let ongoing = "now"
+    static let tomorrow = "Tomorrow"
 
     static let power = "Power"
     static let volume = "VOLUME"

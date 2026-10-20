@@ -1,26 +1,28 @@
+import Shared
 import SwiftUI
 
-/// Interim Cameras screen: every camera in a wrapping vertical list (never side-scrolling), each opening the app's
-/// existing native camera player. The designed camera screen (live view, events, switcher) comes later.
+/// Cameras (menu destination): every camera as a tile in a wrapping two-column grid (never side-scrolling), each
+/// opening that camera's native screen.
 struct KhalaCamerasView: View {
     let cameras: [KhalaEntity]
+    @ObservedObject var live: KhalaLiveStates
+    let actions: KhalaScreenActions
+    let now: Date
+    let calendar: Calendar
     let onMenu: () -> Void
-    let onCamera: (KhalaEntity) -> Void
+    let onCamera: (String) -> Void
 
     var body: some View {
+        let rows = KhalaCameraCatalog.rows(cameras: cameras, entities: live.entities, now: now, calendar: calendar)
         KhalaScreen(
             title: KhalaText.cameras,
-            subtitle: KhalaText.cameraCount(cameras.count),
+            subtitle: KhalaText.cameraCount(rows.count),
             onMenu: onMenu
         ) {
-            LazyVStack(spacing: 12) {
-                ForEach(cameras, id: \.entityId) { camera in
-                    KhalaUpcomingCard(
-                        title: camera.name,
-                        subtitle: KhalaText.humanized(state: camera.state),
-                        category: .security
-                    ) {
-                        onCamera(camera)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+                ForEach(rows) { row in
+                    KhalaCameraTile(row: row, actions: actions) {
+                        onCamera(row.entityId)
                     }
                 }
             }
@@ -28,14 +30,20 @@ struct KhalaCamerasView: View {
     }
 }
 
+#if DEBUG
 #Preview {
     KhalaCamerasView(
         cameras: [
             KhalaEntity(entityId: "camera.porch", state: "idle", lastChanged: Date(), attributes: ["friendly_name": "Porch"]),
-            KhalaEntity(entityId: "camera.yard", state: "recording", lastChanged: Date(), attributes: ["friendly_name": "Yard"]),
+            KhalaEntity(entityId: "camera.yard", state: "idle", lastChanged: Date(), attributes: ["friendly_name": "Yard"]),
         ],
+        live: KhalaLiveStates(),
+        actions: KhalaScreenActions(server: ServerFixture.standard),
+        now: Date(),
+        calendar: .current,
         onMenu: {},
         onCamera: { _ in }
     )
     .background(KhalaGround())
 }
+#endif
