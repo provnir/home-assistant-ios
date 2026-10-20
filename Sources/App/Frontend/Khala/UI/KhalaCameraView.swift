@@ -14,7 +14,6 @@ struct KhalaCameraView: View {
     let actions: KhalaScreenActions
     let now: Date
     let calendar: Calendar
-    let onBack: () -> Void
     let onSelectCamera: (String) -> Void
     let onAllCameras: () -> Void
     let onFullScreen: (String, String?) -> Void
@@ -44,7 +43,6 @@ struct KhalaCameraView: View {
                 tabs: Self.tabs,
                 selection: $tab,
                 category: .security,
-                onBack: onBack,
                 title: { titleButton(camera?.name ?? cameraEntityId, hasChoice: cameras.count > 1) },
                 trailing: { EmptyView() },
                 content: {

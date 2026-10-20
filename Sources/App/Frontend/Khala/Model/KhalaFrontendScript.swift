@@ -21,8 +21,9 @@ import Foundation
 ///    dialog (`history.state.dialog`, kept by `src/dialogs/make-dialog-manager.ts`), the dashboard's selectable
 ///    views from `hui-root.lovelace.config.views` (the frontend's resolved config, so strategy dashboards such as an
 ///    auto-generated Overview have views too — `lovelace/config` returns none for them) filtered like its tab bar
-///    (no sub-views, `visible` honoured), the current view, sub-view/back-button/edit state, and the toolbar's
-///    action items.
+///    (no sub-views, `visible` honoured), the current view, sub-view/back-button/edit state, the toolbar's
+///    action items, and — on pages `hui-root` doesn't draw (`/config/...`) — whether the page shows the frontend's
+///    own back arrow (`pageBack`; its top-level pages show the menu button there instead).
 /// 4. **Drive.** `window.__khala.back()` uses the frontend's own back paths: a dialog closes through
 ///    `history.back()` (how the dialog manager expects to be closed), a sub-view or sub-page through a click on
 ///    the frontend's own back arrow (so `back_path` and unsaved-changes guards still apply). `perform(id, title)`
@@ -293,6 +294,20 @@ enum KhalaFrontendScript {
             return out;
           };
 
+          // Pages not drawn by hui-root (config, history, ...): a visible frontend back arrow is the frontend's own
+          // "this is a sub-page" (its top-level pages show the menu button there instead, hidden by `hasSidebar`).
+          // A whole-tree walk, so cached per path for a moment.
+          let pageBackCache = { path: null, value: false, at: 0 };
+          const pageHasBack = () => {
+            const now = Date.now();
+            if (pageBackCache.path === location.pathname && now - pageBackCache.at < 1500) {
+              return pageBackCache.value;
+            }
+            const value = Boolean(deepFind((node) => node.localName === "ha-icon-button-arrow-prev" && visible(node)));
+            pageBackCache = { path: location.pathname, value, at: now };
+            return value;
+          };
+
           let last = null;
           const report = () => {
             try {
@@ -308,11 +323,13 @@ enum KhalaFrontendScript {
                 }
               }
               if (!actions.length) { handlers = new Map(); }
+              const onDashboard = Boolean(dashboard && visible(element));
               const state = {
                 path: location.pathname,
                 dialog: history.state && typeof history.state.dialog === "string" ? history.state.dialog : null,
                 dashboard,
                 actions,
+                pageBack: onDashboard ? null : pageHasBack(),
               };
               const json = JSON.stringify(state);
               if (json === last) { return; }
@@ -324,6 +341,12 @@ enum KhalaFrontendScript {
           const schedule = () => {
             if (pending !== null) { return; }
             pending = setTimeout(() => { pending = null; report(); }, 60);
+          };
+          // After a navigation the new page renders a little later: look again once it has.
+          const scheduleSettled = () => {
+            schedule();
+            setTimeout(() => { pageBackCache.at = 0; schedule(); }, 400);
+            setTimeout(() => { pageBackCache.at = 0; schedule(); }, 1200);
           };
 
           customElements.whenDefined("hui-root").then(() => {
@@ -355,14 +378,15 @@ enum KhalaFrontendScript {
             if (typeof original !== "function") { return; }
             history[name] = function (...args) {
               const result = original.apply(this, args);
-              schedule();
+              scheduleSettled();
               return result;
             };
           });
           ["location-changed", "popstate", "show-dialog", "dialog-closed"].forEach((name) => {
-            window.addEventListener(name, schedule);
+            window.addEventListener(name, scheduleSettled);
           });
-          document.addEventListener("DOMContentLoaded", schedule, { once: true });
+          document.addEventListener("DOMContentLoaded", scheduleSettled, { once: true });
+          window.addEventListener("load", scheduleSettled, { once: true });
 
           // 4. What the native header drives.
           const visible = (element) => Boolean(element && element.getClientRects().length);

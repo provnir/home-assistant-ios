@@ -1,5 +1,6 @@
 import Combine
 import Foundation
+import HAKit
 import Shared
 import UIKit
 
@@ -22,9 +23,7 @@ final class KhalaShellModel: ObservableObject {
         }
     }
 
-    /// Routing (`KhalaShellModel+Routing`): where a device/camera screen's back button returns, and the media
-    /// sheet on display.
-    @Published var returnDestination: KhalaDestination = .today
+    /// Routing (`KhalaShellModel+Routing`): the media sheet on display.
     @Published var sheet: KhalaSheetRequest?
 
     /// The web frontend is up (connected or loaded), so the native dashboards header is drawn over it. While it
@@ -55,6 +54,11 @@ final class KhalaShellModel: ObservableObject {
     /// bar): panels, the user's order and hidden panels, the default dashboard. Created on the first attach.
     private var sidebar: MacSidebarViewModel?
     private var sidebarObservation: AnyCancellable?
+    /// Home Assistant's own settings (`/config`, the panel whose component is `config`), opened in the web UI
+    /// under Khala's header. Nil until the panels load, and for users who aren't admins (`get_panels` leaves the
+    /// admin-only panel out for them).
+    @Published private(set) var serverSettings: KhalaDashboard?
+    private var panelsToken: HACancellable?
 
     /// The frontend asked for the app's menu (the app's edge swipe on the web UI, bounced back as `sidebar/show`).
     /// The view opens the drawer with its own animation.
@@ -64,6 +68,10 @@ final class KhalaShellModel: ObservableObject {
     private(set) weak var webViewController: WebViewController?
     private var cancellables = Set<AnyCancellable>()
     private var frontendMenuRequest: AnyCancellable?
+
+    deinit {
+        panelsToken?.cancel()
+    }
 
     init(server: Server, startsOnDashboards: Bool) {
         self.server = server
@@ -166,6 +174,17 @@ final class KhalaShellModel: ObservableObject {
             .sink { [weak self] items in self?.setDashboards(items) }
         self.sidebar = sidebar
         sidebar.start()
+
+        // The settings panel's url from the panels list itself rather than a hard-coded `/config`.
+        panelsToken = Current.api(for: server)?.connection.caches.panels.subscribe { [weak self] _, panels in
+            let panel = panels.allPanels.first { $0.component == "config" }
+            Task { @MainActor [weak self] in
+                let settings = panel.map { KhalaDashboard(id: $0.path, title: KhalaText.serverSettings) }
+                if self?.serverSettings != settings {
+                    self?.serverSettings = settings
+                }
+            }
+        }
     }
 
     private func setDashboards(_ items: [MacSidebarItem]) {

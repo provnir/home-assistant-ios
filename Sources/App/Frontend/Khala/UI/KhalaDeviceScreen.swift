@@ -1,17 +1,16 @@
 import SFSafeSymbols
 import SwiftUI
 
-/// The frame of a device or camera screen (mockups `DayCamera`, `DayCar`, `DayWater`): a glass back button beside
-/// the shell's pinned menu button (`KhalaShellView.menuButtonInset`, which every native screen keeps), an optional
-/// trailing control, the large title (a view, so the
-/// camera's can be a pull-down), a subtitle, the content in a vertical scroll view, and the sections' glass bar
-/// floating at the bottom. The ground is the shell's.
+/// The frame of a device or camera screen (mockups `DayCamera`, `DayCar`, `DayWater`). Its only leading control is
+/// the shell's pinned menu button (`KhalaShellView.menuButtonInset`): no back button beside it, the drawer is the
+/// navigation (Nir, build 14.1). Then an optional trailing control, the large title (a view, so the camera's can be
+/// a pull-down), a subtitle, the content in a vertical scroll view, and the sections' glass bar floating at the
+/// bottom. The ground is the shell's.
 struct KhalaDeviceScreen<Title: View, Trailing: View, Content: View>: View {
     let subtitle: String?
     let tabs: [KhalaSubTab]
     @Binding var selection: Int
     let category: KhalaCategory
-    let onBack: () -> Void
     @ViewBuilder let title: () -> Title
     @ViewBuilder let trailing: () -> Trailing
     @ViewBuilder let content: () -> Content
@@ -40,9 +39,8 @@ struct KhalaDeviceScreen<Title: View, Trailing: View, Content: View>: View {
             .scrollIndicators(.hidden)
 
             HStack(spacing: 8) {
-                // The shell's menu button occupies the first 44 pt slot; Back sits right after it.
+                // The shell's menu button occupies the first 44 pt slot, the only leading control.
                 Color.clear.frame(width: 44, height: 44)
-                KhalaGlassButton(symbol: .chevronLeft, accessibilityLabel: KhalaScreenText.back, action: onBack)
                 Spacer()
                 trailing()
             }
@@ -67,7 +65,6 @@ struct KhalaDeviceScreen<Title: View, Trailing: View, Content: View>: View {
         ],
         selection: .constant(0),
         category: .car,
-        onBack: {},
         title: { KhalaLargeTitle(text: "Rover") },
         trailing: { EmptyView() },
         content: { Text("Content") }

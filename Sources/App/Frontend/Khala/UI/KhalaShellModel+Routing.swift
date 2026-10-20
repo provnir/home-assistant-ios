@@ -13,18 +13,10 @@ extension KhalaShellModel {
         }
     }
 
-    /// Opens a destination. A screen opened from one of the menu's destinations remembers it for its back button;
-    /// moving between screens (the camera picker) keeps the place to go back to.
+    /// Opens a destination. Screens have no back button (one leading control: the menu button), so nothing is
+    /// remembered; the drawer is the way on.
     func show(_ newDestination: KhalaDestination) {
         isMenuOpen = false
-        if !newDestination.isMenuDestination, destination.isMenuDestination {
-            returnDestination = destination
-        }
         destination = newDestination
-    }
-
-    /// The back button of a device or camera screen.
-    func goBack() {
-        destination = returnDestination
     }
 }

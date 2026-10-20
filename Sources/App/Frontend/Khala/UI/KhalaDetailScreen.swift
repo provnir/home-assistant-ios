@@ -21,7 +21,6 @@ struct KhalaDetailScreen: View {
                 actions: actions,
                 now: home.now,
                 calendar: home.calendar,
-                onBack: { shell.goBack() },
                 onSelectCamera: { shell.show(.camera(entityId: $0)) },
                 onAllCameras: { shell.show(.cameras) },
                 onFullScreen: { entityId, name in shell.openCamera(entityId: entityId, name: name) }
@@ -36,7 +35,6 @@ struct KhalaDetailScreen: View {
                         live: live,
                         actions: actions,
                         calendar: home.calendar,
-                        onBack: { shell.goBack() },
                         onMedia: { entityId in shell.route(.mediaSheet(deviceId: device.id, entityId: entityId)) }
                     )
                 case .heat:
@@ -45,8 +43,7 @@ struct KhalaDetailScreen: View {
                         live: live,
                         actions: actions,
                         now: home.now,
-                        calendar: home.calendar,
-                        onBack: { shell.goBack() }
+                        calendar: home.calendar
                     )
                 case .media, .security, .sun, .neutral:
                     generic(device.name, category: device.category, primary: device.primaryEntityId,
@@ -77,8 +74,7 @@ struct KhalaDetailScreen: View {
             memberEntityIds: members,
             live: live,
             actions: actions,
-            calendar: home.calendar,
-            onBack: { shell.goBack() }
+            calendar: home.calendar
         )
     }
 }

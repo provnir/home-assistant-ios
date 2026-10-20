@@ -11,7 +11,6 @@ struct KhalaWaterView: View {
     let actions: KhalaScreenActions
     let now: Date
     let calendar: Calendar
-    let onBack: () -> Void
 
     @State private var tab = 0
     @State private var minutes = KhalaHeatLayout.defaultDuration
@@ -32,7 +31,6 @@ struct KhalaWaterView: View {
             tabs: Self.tabs,
             selection: $tab,
             category: .heat,
-            onBack: onBack,
             title: { KhalaLargeTitle(text: device.name) },
             trailing: { EmptyView() },
             content: {

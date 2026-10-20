@@ -8,12 +8,22 @@ struct KhalaFrontendState: Hashable {
     let dialog: String?
     let dashboard: KhalaDashboardPage?
     let actions: [KhalaFrontendAction]
+    /// On a page `hui-root` doesn't draw: the frontend shows its own back arrow there (a sub-page such as
+    /// `/config/automation/dashboard`, as opposed to `/config/dashboard`). Nil on dashboards.
+    let pageBack: Bool?
 
-    init(path: String, dialog: String? = nil, dashboard: KhalaDashboardPage? = nil, actions: [KhalaFrontendAction] = []) {
+    init(
+        path: String,
+        dialog: String? = nil,
+        dashboard: KhalaDashboardPage? = nil,
+        actions: [KhalaFrontendAction] = [],
+        pageBack: Bool? = nil
+    ) {
         self.path = path
         self.dialog = dialog
         self.dashboard = dashboard
         self.actions = actions
+        self.pageBack = pageBack
     }
 
     /// Reads the script's `state` message. Anything malformed reads as nil (the shell then behaves as if the
@@ -24,7 +34,8 @@ struct KhalaFrontendState: Hashable {
             path: path,
             dialog: KhalaValue.string(json["dialog"]),
             dashboard: KhalaDashboardPage(json: json["dashboard"]),
-            actions: (json["actions"] as? [Any] ?? []).compactMap(KhalaFrontendAction.init(json:))
+            actions: (json["actions"] as? [Any] ?? []).compactMap(KhalaFrontendAction.init(json:)),
+            pageBack: KhalaValue.bool(json["pageBack"])
         )
     }
 }

@@ -73,6 +73,7 @@ struct KhalaFrontendStateTests {
             ] as [String: Any],
             ["title": "no id"],
         ],
+        "pageBack": NSNull(),
     ]
 
     @Test func readsTheScriptsReport() throws {
@@ -91,6 +92,8 @@ struct KhalaFrontendStateTests {
         #expect(page.unnamedViewTitle == "Unnamed view")
         #expect(state.actions.map(\.id) == ["a0", "g3"])
         #expect(state.actions[1].children.map(\.title) == ["Add device"])
+        #expect(state.pageBack == nil)
+        #expect(KhalaFrontendState(json: ["path": "/config/automation", "pageBack": NSNumber(value: true)])?.pageBack == true)
     }
 
     @Test func malformedReportsReadAsNil() {
@@ -208,6 +211,40 @@ struct KhalaDashboardHeaderTests {
         #expect(header.showsBack)
         #expect(header.views.isEmpty)
         #expect(header.actions.isEmpty)
+    }
+
+    private let settings = KhalaDashboard(id: "config", title: "Home Assistant settings")
+
+    private func settingsHeader(path: String, pageBack: Bool?) -> KhalaDashboardHeader {
+        KhalaDashboardHeader(
+            dashboards: dashboards,
+            otherPages: [settings],
+            path: path,
+            state: pageBack.map { KhalaFrontendState(path: path, pageBack: $0) },
+            isMoreInfoOpen: false,
+            fallbackTitle: "Dashboards"
+        )
+    }
+
+    @Test func serverSettingsRootKeepsTheMenuButton() {
+        let header = settingsHeader(path: "/config/dashboard", pageBack: false)
+        #expect(header.title == "Home Assistant settings")
+        #expect(header.current == nil)
+        #expect(header.currentPage == settings)
+        #expect(!header.showsBack)
+        #expect(header.dashboards.map(\.id) == ["home", "dashboard-den"])
+    }
+
+    @Test func serverSettingsSubPagesShowBackInItsPlace() {
+        let header = settingsHeader(path: "/config/automation/dashboard", pageBack: true)
+        #expect(header.title == "Home Assistant settings")
+        #expect(header.showsBack)
+    }
+
+    @Test func withoutTheScriptAListedPageIsARootAndAnUnlistedOneOffersBack() {
+        #expect(!settingsHeader(path: "/config/dashboard", pageBack: nil).showsBack)
+        #expect(settingsHeader(path: "/profile/general", pageBack: nil).showsBack)
+        #expect(!settingsHeader(path: "/profile/general", pageBack: false).showsBack)
     }
 
     @Test func nothingIsOffADashboardBeforeTheListLoads() {

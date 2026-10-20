@@ -10,7 +10,6 @@ struct KhalaCarView: View {
     @ObservedObject var live: KhalaLiveStates
     let actions: KhalaScreenActions
     let calendar: Calendar
-    let onBack: () -> Void
     /// Opens the media sheet for the car's own player.
     let onMedia: (String) -> Void
 
@@ -34,7 +33,6 @@ struct KhalaCarView: View {
             tabs: Self.tabs,
             selection: $tab,
             category: .car,
-            onBack: onBack,
             title: { KhalaLargeTitle(text: device.name) },
             trailing: { wakePill(car) },
             content: {

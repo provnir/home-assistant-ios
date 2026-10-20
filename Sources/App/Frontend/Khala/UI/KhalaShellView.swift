@@ -150,6 +150,12 @@ struct KhalaShellView: View {
                     shell.openDashboard(dashboard)
                 }
             },
+            serverSettings: shell.serverSettings,
+            onServerSettings: {
+                withAnimation(settleAnimation) {
+                    shell.openServerSettings()
+                }
+            },
             onSelect: { destination in
                 withAnimation(settleAnimation) {
                     shell.destination = destination
@@ -209,9 +215,10 @@ struct KhalaShellView: View {
                 .transition(.opacity)
             }
 
-            // Pinned top-leading in the safe area on every screen (the dashboards header leaves its slot free),
-            // above the content and never part of its flow.
-            if shell.destination != .dashboards || showsDashboardHeader {
+            // Pinned top-leading in the safe area, above the content and never part of its flow: the one leading
+            // control on every screen. Over the web UI the dashboards header swaps it for Back while the frontend
+            // is on a sub-page or dialog (the drawer stays one edge swipe away).
+            if shell.destination != .dashboards || (showsDashboardHeader && !shell.dashboardHeader.showsBack) {
                 KhalaGlassButton(symbol: .sidebarLeft, accessibilityLabel: KhalaText.openMenu) {
                     settle(open: true)
                 }

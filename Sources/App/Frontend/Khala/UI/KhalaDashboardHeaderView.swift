@@ -3,9 +3,9 @@ import Shared
 import SwiftUI
 
 /// Khala's header over the web frontend (Dashboards): a soft material band behind the status bar and the row,
-/// which the web content scrolls under, and floating glass controls on it — the shell's pinned menu button in
-/// slot one (drawn by `KhalaShellView`), Back after it while the frontend is on a sub-view, a dialog or a page
-/// that isn't a dashboard, the dashboard's name as a pull-down menu (its views, then all dashboards: vertical
+/// which the web content scrolls under, and floating glass controls on it — one leading control (the shell's
+/// pinned menu button, drawn by `KhalaShellView`, or Back in its place while the frontend is on a sub-view, a
+/// dialog or a sub-page), the dashboard's name as a pull-down menu (its views, then all dashboards: vertical
 /// lists, never side-scrolling), and the dashboard's own actions under "More". The frontend's own toolbar is
 /// hidden on dashboards (`KhalaFrontendScript`), and its content starts below this row
 /// (`KhalaFrontendScript.headerInset`).
@@ -19,11 +19,13 @@ struct KhalaDashboardHeaderView: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            // The shell's menu button occupies the first 44 pt slot.
-            Color.clear.frame(width: 44, height: 44)
+            // One leading control, never two: Back while the frontend is on a sub-page or dialog, otherwise the
+            // shell's pinned menu button, which sits in this slot.
             if header.showsBack {
                 KhalaGlassButton(symbol: .chevronLeft, accessibilityLabel: KhalaScreenText.back, action: onBack)
                     .transition(.opacity)
+            } else {
+                Color.clear.frame(width: 44, height: 44)
             }
             titleMenu
                 .layoutPriority(1)

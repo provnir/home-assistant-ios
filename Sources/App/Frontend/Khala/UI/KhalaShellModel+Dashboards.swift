@@ -9,6 +9,7 @@ extension KhalaShellModel {
     var dashboardHeader: KhalaDashboardHeader {
         KhalaDashboardHeader(
             dashboards: dashboards,
+            otherPages: serverSettings.map { [$0] } ?? [],
             path: frontendPath,
             state: frontendState,
             isMoreInfoOpen: isMoreInfoOpen,
@@ -16,9 +17,15 @@ extension KhalaShellModel {
         )
     }
 
-    /// The menu row to highlight in the drawer's DASHBOARDS section, while the web UI is on screen.
+    /// The drawer row to highlight (a DASHBOARDS row, or Home Assistant settings) while the web UI is on screen.
     var highlightedDashboardId: String? {
-        destination == .dashboards ? dashboardHeader.current?.id : nil
+        destination == .dashboards ? dashboardHeader.currentPage?.id : nil
+    }
+
+    /// Home Assistant's own settings (`/config`) in the web UI, under Khala's header.
+    func openServerSettings() {
+        guard let serverSettings else { return }
+        openDashboard(serverSettings)
     }
 
     /// Opens a dashboard (its default view) in the web UI.

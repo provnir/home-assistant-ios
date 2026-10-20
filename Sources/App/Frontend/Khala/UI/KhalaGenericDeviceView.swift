@@ -12,7 +12,6 @@ struct KhalaGenericDeviceView: View {
     @ObservedObject var live: KhalaLiveStates
     let actions: KhalaScreenActions
     let calendar: Calendar
-    let onBack: () -> Void
 
     private static let switchable: Set<String> = ["switch", "light", "fan", "input_boolean", "automation", "siren"]
 
@@ -28,7 +27,6 @@ struct KhalaGenericDeviceView: View {
             tabs: [],
             selection: .constant(0),
             category: category,
-            onBack: onBack,
             title: { KhalaLargeTitle(text: title) },
             trailing: { EmptyView() },
             content: {

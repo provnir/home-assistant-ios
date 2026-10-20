@@ -23,6 +23,9 @@ struct KhalaMenuView: View {
     /// The dashboard on screen while the web UI is (its row is the highlighted one, not "Dashboards").
     var highlightedDashboardId: String?
     var onDashboard: (KhalaDashboard) -> Void = { _ in }
+    /// Home Assistant's own settings (`/config`), opened in the web UI; nil for non-admins.
+    var serverSettings: KhalaDashboard?
+    var onServerSettings: () -> Void = {}
     let onSelect: (KhalaDestination) -> Void
     let onDevice: (KhalaDevice) -> Void
     let onEditDevices: () -> Void
@@ -157,7 +160,26 @@ struct KhalaMenuView: View {
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.immediately)
 
-            KhalaMenuRow(title: KhalaText.settings, symbol: .gearshape, symbolColor: KhalaTheme.ink, action: onSettings)
+            // SETTINGS: the server's (devices & services, automations, add-ons ... in the web UI) and the app's own
+            // (servers, gestures, kiosk mode, notifications), told apart by name.
+            sectionTitle(KhalaText.settingsSection)
+                .padding(.leading, 12)
+                .padding(.top, 6)
+            if let serverSettings {
+                KhalaMenuRow(
+                    title: serverSettings.title,
+                    symbol: .gearshape,
+                    symbolColor: KhalaTheme.ink,
+                    isSelected: serverSettings.id == highlightedDashboardId,
+                    action: onServerSettings
+                )
+            }
+            KhalaMenuRow(
+                title: KhalaText.appSettings,
+                symbol: .sliderHorizontal3,
+                symbolColor: KhalaTheme.ink,
+                action: onSettings
+            )
         }
         .padding(.horizontal, 14)
         .padding(.top, 11)
