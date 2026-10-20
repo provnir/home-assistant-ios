@@ -36,7 +36,8 @@ struct NativeTabBarEnabledStateTests {
 
         let state = NativeTabBarState()
         #expect(!state.isEnabled)
-        #expect(WebViewExternalBusMessage.configResult["hasSidebar"] as? Bool == false)
+        // Khala's menu takes the sidebar over whenever its shell is on, tab bar or not.
+        #expect(WebViewExternalBusMessage.configResult["hasSidebar"] as? Bool == KhalaShell.isEnabled)
 
         try await setTabBar(enabled: true)
         for _ in 0 ..< 100 where !state.isEnabled {

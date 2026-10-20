@@ -39,7 +39,7 @@ enum WebViewExternalBusMessage: String, CaseIterable {
     @MainActor static var configResult: [String: Any] {
         [
             "hasSettingsScreen": !Current.isCatalyst,
-            "hasSidebar": AppLabsFeature.iosNativeTabBar.isEnabled,
+            "hasSidebar": AppLabsFeature.iosNativeTabBar.isEnabled || KhalaShell.isEnabled,
             "canWriteTag": Current.tags.isNFCAvailable,
             "canCommissionMatter": Current.matter.isAvailable,
             "hasMatterStatusReport": Current.matter.isAvailable,
