@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 176 176">
+  <!-- Khala app icon: a sun on its arc over the horizon, on deep ink. Full-bleed and opaque:
+       iOS applies the corner mask itself. Stroke weights are a touch heavier than the
+       Identity mockup so the arc survives home-screen sizes. -->
+  <defs>
+    <linearGradient id="ink" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#16223a"/>
+      <stop offset="1" stop-color="#05070e"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="58%" cy="44%" r="50%">
+      <stop offset="0" stop-color="#ffce82" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#ffce82" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="176" height="176" fill="url(#ink)"/>
+  <rect width="176" height="176" fill="url(#glow)"/>
+  <path d="M24 120 H152" stroke="#f3f1ec" stroke-opacity="0.38" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M32 120 Q88 26 144 120" fill="none" stroke="#f3e7cf" stroke-opacity="0.9" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="101.9" cy="76.5" r="17" fill="#f2b35b" fill-opacity="0.2"/>
+  <circle cx="101.9" cy="76.5" r="9" fill="#f2b35b"/>
+  <g fill="#6fd6c8"><circle cx="58" cy="138" r="2.6"/><circle cx="88" cy="138" r="2.6"/><circle cx="118" cy="138" r="2.6"/></g>
+</svg>

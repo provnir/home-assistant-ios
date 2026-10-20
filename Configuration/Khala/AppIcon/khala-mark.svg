@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 176 176">
+  <!-- Foreground of the Khala icon on a transparent canvas: the layer of the iOS 26+
+       Icon Composer icon (AppIcon.icon), whose own fill supplies the deep-ink background. -->
+  <path d="M24 120 H152" stroke="#f3f1ec" stroke-opacity="0.38" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M32 120 Q88 26 144 120" fill="none" stroke="#f3e7cf" stroke-opacity="0.9" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="101.9" cy="76.5" r="17" fill="#f2b35b" fill-opacity="0.2"/>
+  <circle cx="101.9" cy="76.5" r="9" fill="#f2b35b"/>
+  <g fill="#6fd6c8"><circle cx="58" cy="138" r="2.6"/><circle cx="88" cy="138" r="2.6"/><circle cx="118" cy="138" r="2.6"/></g>
+</svg>

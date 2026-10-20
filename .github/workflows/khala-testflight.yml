@@ -1,0 +1,226 @@
+# Khala (Nir's fork of the Home Assistant iOS app) -> TestFlight internal testing.
+#
+# Nir's CI rules, keep them:
+# - Manual only. workflow_dispatch is the ONLY trigger: never add push, pull_request or schedule.
+#   This is the only workflow on the khala branch; upstream's workflows were deleted on purpose.
+# - macOS only for archive/export. Validation, App Store Connect checks and the TestFlight
+#   upload run on Ubuntu. No simulators, no tests on macOS.
+# - No unneeded storage: the signed IPA is the only artifact, kept 1 day, deleted after upload.
+# - Keep the file name: github.run_number feeds CFBundleVersion (run.attempt), and a renamed
+#   workflow restarts the counter.
+# Billing: the fork is public, and standard GitHub-hosted runners (xcode-27 included) cost no
+# minutes on public repositories; the discipline above applies anyway (Nir's rule, and the
+# repository could go private).
+# The Khala build identity (team, bundle prefix, trimmed targets, name, icon) is applied at
+# build time by Configuration/Khala/khala_ship.py. Runbook: notes/ha-ios/SHIP.md (Bob-Programmer).
+name: Khala TestFlight
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Upload to TestFlight. false = archive, export and verify only (nothing kept).'
+        type: boolean
+        default: true
+      preflight_only:
+        description: 'Only the Ubuntu App Store Connect preflight (registers the bundle ID if missing). Zero macOS minutes.'
+        type: boolean
+        default: false
+      signing:
+        description: 'cloud = Xcode automatic + cloud-managed signing via the API key. p12 = fallback, needs the APPSTORE_DIST_P12_* secrets and an App Store profile.'
+        type: choice
+        options: [cloud, p12]
+        default: cloud
+      xcode:
+        description: 'Xcode on the xcode-27 image (/Applications/Xcode_<this>.app). App Store Connect rejects beta-built uploads.'
+        type: string
+        default: '27.1'
+
+concurrency:
+  group: khala-testflight
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  BUNDLE_ID_PREFIX: il.co.provizor.khala
+  # Upstream derives every ID from the prefix: <prefix>.HomeAssistant, group.<prefix>.homeassistant.
+  BUNDLE_ID: il.co.provizor.khala.HomeAssistant
+  APPLE_TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
+  SIGNING: ${{ inputs.signing }}
+
+jobs:
+  prepare:
+    name: Validate Khala identity and App Store Connect (Ubuntu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    outputs:
+      short_version: ${{ steps.version.outputs.short_version }}
+      build_number: ${{ steps.version.outputs.build_number }}
+      profile_name: ${{ steps.asc.outputs.profile_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Lint release scripts
+        run: |
+          set -euo pipefail
+          python3 -m py_compile Configuration/Khala/khala_ship.py
+          bash -n Configuration/Khala/archive.sh
+          if ls .github/workflows | grep -v -x 'khala-testflight.yml'; then
+            echo '::error::only khala-testflight.yml may live in .github/workflows (upstream workflows must not run here)'
+            exit 1
+          fi
+      - name: Apply the Khala identity to this throwaway checkout
+        # Proves on Linux, before any macOS minute, that the target trim, entitlements,
+        # display name and icon still apply cleanly to this commit's upstream project.
+        run: python3 Configuration/Khala/khala_ship.py apply --team "$APPLE_TEAM_ID" --prefix "$BUNDLE_ID_PREFIX"
+      - name: Version and build number
+        id: version
+        run: |
+          set -euo pipefail
+          version=$(sed -n 's/^MARKETING_VERSION *= *//p' Configuration/Version.xcconfig | tr -d '[:space:]')
+          [[ "$version" =~ ^[0-9]+(\.[0-9]+){0,2}$ ]] || { echo "::error::bad MARKETING_VERSION '$version'"; exit 1; }
+          build="${{ github.run_number }}.${{ github.run_attempt }}"
+          echo "short_version=$version" >> "$GITHUB_OUTPUT"
+          echo "build_number=$build" >> "$GITHUB_OUTPUT"
+          echo "- Khala $version ($build) from ${GITHUB_REF_NAME} @ ${GITHUB_SHA::9}, signing=$SIGNING." >> "$GITHUB_STEP_SUMMARY"
+      - name: Install App Store Connect client dependencies
+        run: python3 -m pip install --quiet 'pyjwt[crypto]==2.10.1'
+      - name: App Store Connect preflight
+        id: asc
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          APPSTORE_DIST_P12_BASE64: ${{ inputs.signing == 'p12' && secrets.APPSTORE_DIST_P12_BASE64 || '' }}
+          APPSTORE_DIST_P12_PASSWORD: ${{ inputs.signing == 'p12' && secrets.APPSTORE_DIST_P12_PASSWORD || '' }}
+          READ_ONLY: ${{ inputs.preflight_only && '--read-only' || '' }}
+        # A build run (cloud) also revokes leftover key-less "Created via API" development
+        # certificates from earlier runs; preflight_only only reports them.
+        run: python3 Configuration/Khala/khala_ship.py asc --mode "$SIGNING" --bundle-id "$BUNDLE_ID" $READ_ONLY
+
+  archive:
+    name: Archive and export Khala (macOS, Xcode ${{ inputs.xcode }})
+    needs: prepare
+    if: ${{ !inputs.preflight_only }}
+    # GitHub-hosted Xcode 27 image (public preview, arm64): actions/runner-images#14404.
+    # Standard size only; the -xlarge label is billed even on public repositories.
+    runs-on: xcode-27
+    timeout-minutes: 75
+    outputs:
+      ipa_artifact_id: ${{ steps.ipa.outputs.artifact-id }}
+    env:
+      # Exported as DEVELOPER_DIR only after it is checked: a bad path would break even git.
+      XCODE_DEVELOPER_DIR: /Applications/Xcode_${{ inputs.xcode }}.app/Contents/Developer
+      SHORT_VERSION: ${{ needs.prepare.outputs.short_version }}
+      BUILD_NUMBER: ${{ needs.prepare.outputs.build_number }}
+      PROFILE_NAME: ${{ needs.prepare.outputs.profile_name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Report the selected Xcode
+        env:
+          PUBLISH: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+          if [ ! -d "$XCODE_DEVELOPER_DIR" ]; then
+            echo "::error::$XCODE_DEVELOPER_DIR does not exist on this image; pick one of:"
+            ls -d /Applications/Xcode*.app
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=$XCODE_DEVELOPER_DIR" >> "$GITHUB_ENV"
+          resolved=$(cd "$XCODE_DEVELOPER_DIR" && pwd -P)
+          # The image's version aliases can point at a beta/RC build; the build number tells.
+          echo "Xcode $XCODE_DEVELOPER_DIR resolves to $resolved"
+          DEVELOPER_DIR="$XCODE_DEVELOPER_DIR" xcodebuild -version
+          case "$resolved" in
+            *[Bb]eta*) if [ "$PUBLISH" = true ]; then
+                echo '::error::this Xcode is a beta; App Store Connect rejects uploads built with it'; exit 1
+              fi ;;
+          esac
+      - name: Import the distribution certificate (p12 fallback only)
+        if: inputs.signing == 'p12'
+        uses: Apple-Actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466
+        with:
+          p12-file-base64: ${{ secrets.APPSTORE_DIST_P12_BASE64 }}
+          p12-password: ${{ secrets.APPSTORE_DIST_P12_PASSWORD }}
+      - name: Download the App Store profile (p12 fallback only)
+        if: inputs.signing == 'p12'
+        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594
+        with:
+          bundle-id: ${{ env.BUNDLE_ID }}
+          profile-type: IOS_APP_STORE
+          issuer-id: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+          api-key-id: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
+          api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+      - name: Archive, export and verify the signature
+        id: build
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ inputs.signing == 'cloud' && secrets.APP_STORE_CONNECT_PRIVATE_KEY || '' }}
+        run: bash Configuration/Khala/archive.sh
+      - name: Hand the signed IPA to the Ubuntu publisher
+        id: ipa
+        if: inputs.publish
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Khala-${{ env.SHORT_VERSION }}-${{ env.BUILD_NUMBER }}
+          path: ${{ steps.build.outputs.ipa }}
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
+
+  publish:
+    name: Upload to TestFlight (Ubuntu)
+    needs: [prepare, archive]
+    if: ${{ !cancelled() && inputs.publish && !inputs.preflight_only && needs.archive.result == 'success' && needs.archive.outputs.ipa_artifact_id != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: write # delete this run's IPA artifact once it is on TestFlight
+    env:
+      SHORT_VERSION: ${{ needs.prepare.outputs.short_version }}
+      BUILD_NUMBER: ${{ needs.prepare.outputs.build_number }}
+    steps:
+      - name: Checkout the release helper
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: Configuration/Khala
+      - name: Download this run's signed IPA
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.archive.outputs.ipa_artifact_id }}
+          path: ${{ runner.temp }}/release
+          digest-mismatch: error
+      - name: Verify the packaged app
+        run: >-
+          python3 Configuration/Khala/khala_ship.py verify-ipa --ipa "$RUNNER_TEMP/release/Khala.ipa"
+          --team "$APPLE_TEAM_ID" --bundle-id "$BUNDLE_ID" --version "$SHORT_VERSION" --build "$BUILD_NUMBER"
+      - name: Upload to TestFlight and wait for Apple processing
+        timeout-minutes: 20
+        uses: Apple-Actions/upload-testflight-build@5e75ff58276689011512ba87a381d93dc67dbcf8 # v5.3.0
+        with:
+          app-path: ${{ runner.temp }}/release/Khala.ipa
+          app-type: ios
+          backend: appstore-api
+          wait-for-processing: 'true'
+          issuer-id: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+          api-key-id: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
+          api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+      - name: Delete the IPA artifact
+        # Only after a successful upload: a failed upload can still be retried by re-running
+        # this job alone, and the 1-day retention removes the artifact either way.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.archive.outputs.ipa_artifact_id }}
+        run: |
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID"
+          echo "- Khala $SHORT_VERSION ($BUILD_NUMBER) is on TestFlight; IPA artifact deleted." >> "$GITHUB_STEP_SUMMARY"
