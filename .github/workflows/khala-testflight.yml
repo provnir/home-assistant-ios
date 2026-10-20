@@ -27,9 +27,9 @@ on:
         type: boolean
         default: false
       signing:
-        description: 'manual = our Apple Distribution p12 (APPSTORE_DIST_P12_* secrets) + an App Store profile prepare creates. cloud = Xcode automatic/cloud signing via the API key (broken, see SHIP.md).'
+        description: 'manual = our Apple Distribution p12 (APPSTORE_DIST_P12_* secrets) + an App Store profile prepare creates. cloud = Xcode automatic/cloud signing via the API key (broken, see SHIP.md). unsigned = compile-only archive, no export/upload.'
         type: choice
-        options: [manual, cloud]
+        options: [manual, cloud, unsigned]
         default: manual
       xcode:
         description: 'Xcode on the xcode-27 image (/Applications/Xcode_<this>.app). App Store Connect rejects beta-built uploads.'
@@ -186,7 +186,7 @@ jobs:
         run: bash Configuration/Khala/archive.sh
       - name: Hand the signed IPA to the Ubuntu publisher
         id: ipa
-        if: inputs.publish
+        if: inputs.publish && inputs.signing != 'unsigned'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: Khala-${{ env.SHORT_VERSION }}-${{ env.BUILD_NUMBER }}

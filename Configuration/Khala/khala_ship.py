@@ -304,7 +304,7 @@ def verify(args):
 # --- per-run xcodebuild inputs --------------------------------------------------------
 
 def write_xcconfig(args):
-    require(args.mode in ("cloud", "manual"), "signing mode must be cloud or manual")
+    require(args.mode in ("cloud", "manual", "unsigned"), "signing mode must be manual, cloud or unsigned")
     require(re.fullmatch(r"[0-9]+(\.[0-9]+){0,2}", args.version), "MARKETING_VERSION must be x[.y[.z]]")
     require(re.fullmatch(r"[1-9][0-9]*(\.[0-9]+){0,2}", args.build), "build number must be x[.y[.z]]")
     lines = [
@@ -316,6 +316,12 @@ def write_xcconfig(args):
         # Upstream ships ~20 HA-logo alternate icons; only Khala's primary icon goes in.
         "ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO",
     ]
+    if args.mode == "unsigned":
+        # Compile-only check: nothing is signed, exported or uploaded.
+        lines += ["CODE_SIGNING_ALLOWED = NO", "CODE_SIGNING_REQUIRED = NO", "CODE_SIGN_IDENTITY = ",
+                  "CODE_SIGN_STYLE = Manual", "PROVISIONING_PROFILE_SPECIFIER = "]
+        Path(args.out).write_text("\n".join(lines) + "\n")
+        return
     if args.mode == "cloud":
         # Archive with automatic signing (Xcode creates the App ID capabilities, app group,
         # development certificate and profile through the API key); -exportArchive then
@@ -464,6 +470,8 @@ def asc(args):
                   "Then dispatch again.")
     summary(f"- App Store Connect record: {apps[0]['attributes']['name']} ({apps[0]['id']}).")
 
+    if args.mode == "unsigned":
+        return
     if args.mode == "cloud":
         devices = apple.call("/v1/devices?filter[platform]=IOS&filter[status]=ENABLED&limit=1")
         total = devices.get("meta", {}).get("paging", {}).get("total", len(devices.get("data", [])))
@@ -594,13 +602,16 @@ def manual_signing(apple, env, bundle, bundles, read_only, now):
         summary(f"- Created App Store profile \"{PROFILE_NAME}\" ({profile['attributes']['uuid']}).")
     content = profile["attributes"]["profileContent"]
     missing, missing_groups = profile_gaps(profile_entitlements(content), entitlements, groups)
-    require(not missing_groups,
-            f"the App Store profile has no app group {missing_groups}. The App Store Connect API cannot create or "
-            "assign app groups. Once, in Certificates, Identifiers & Profiles: Identifiers > + > App Groups > "
-            f"{', '.join(missing_groups)}; then Identifiers > {bundle} > App Groups > Configure > tick it > Save. "
-            "Then dispatch again (the profile is recreated automatically).")
-    require(not missing, f"the App Store profile lacks entitlements {missing}; enable the matching capability on "
-                         f"the App ID {bundle} in Certificates, Identifiers & Profiles, then dispatch again")
+    steps = []
+    if missing_groups:
+        steps.append(f"the app group {', '.join(missing_groups)} (the App Store Connect API cannot create or assign "
+                     "app groups): Identifiers > + > App Groups > register it; then Identifiers > "
+                     f"{bundle} > App Groups > Configure > tick it > Save")
+    if missing:
+        steps.append(f"entitlements {missing}: on Identifiers > {bundle}, tick the matching capabilities "
+                     f"({', '.join(sorted({CAPABILITY_FOR[k] for k in missing}))}) > Save")
+    require(not steps, "the App Store profile lacks " + "; and ".join(steps) + ". Once, in Certificates, "
+            "Identifiers & Profiles; then dispatch again (the profile is recreated automatically).")
     emit("profile_uuid", profile["attributes"]["uuid"])
     emit("profile_b64", content)
     summary(f"- App Store profile \"{PROFILE_NAME}\" ({profile['attributes']['uuid']}) covers every App "
@@ -692,7 +703,7 @@ def main():
     command.add_argument("--bundle-id", default="")
     command.add_argument("--profile", default="")
     command = commands.add_parser("asc")
-    command.add_argument("--mode", choices=("cloud", "manual"), required=True)
+    command.add_argument("--mode", choices=("cloud", "manual", "unsigned"), required=True)
     command.add_argument("--bundle-id", required=True)
     command.add_argument("--read-only", action="store_true")
     commands.add_parser("cert")

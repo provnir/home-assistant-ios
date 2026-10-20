@@ -12,7 +12,7 @@ cd "$ROOT"
 python3 "$SHIP" apply --team "$APPLE_TEAM_ID" --prefix "$BUNDLE_ID_PREFIX"
 python3 "$SHIP" xcconfig --mode "$SIGNING" --team "$APPLE_TEAM_ID" --version "$SHORT_VERSION" \
     --build "$BUILD_NUMBER" --profile "${PROFILE_UUID:-}" --out "$RUNNER_TEMP/khala.xcconfig"
-python3 "$SHIP" export-options --mode "$SIGNING" --team "$APPLE_TEAM_ID" --bundle-id "$BUNDLE_ID" \
+[[ "$SIGNING" == unsigned ]] || python3 "$SHIP" export-options --mode "$SIGNING" --team "$APPLE_TEAM_ID" --bundle-id "$BUNDLE_ID" \
     --profile "${PROFILE_UUID:-}" --out "$RUNNER_TEMP/ExportOptions.plist"
 
 KEY_DIR="$RUNNER_TEMP/asc-key"
@@ -70,6 +70,11 @@ xcodebuild archive -project HomeAssistant.xcodeproj -scheme App-Release -configu
     -derivedDataPath "$RUNNER_TEMP/DerivedData" -xcconfig "$RUNNER_TEMP/khala.xcconfig" \
     -skipPackagePluginValidation -skipMacroValidation ${auth[@]+"${auth[@]}"} \
     | xcbeautify --renderer github-actions
+
+if [[ "$SIGNING" == unsigned ]]; then
+    echo "- Unsigned compile-only archive succeeded (nothing exported or kept)." >> "$GITHUB_STEP_SUMMARY"
+    exit 0
+fi
 
 EXPORT="$RUNNER_TEMP/export"
 xcodebuild -exportArchive -archivePath "$ARCHIVE" -exportPath "$EXPORT" \
