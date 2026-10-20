@@ -90,7 +90,8 @@ struct ContainerView: View {
     /// The frontend, in the stack Settings is pushed onto; with the App Labs tab bar on it stands alone.
     @ViewBuilder
     private func frontend(server: Server, initialPath: String?) -> some View {
-        let homeAssistant = HomeAssistantView(server: server, initialPath: initialPath) { webViewController in
+        // Khala: the native shell (Today + menu) around the unchanged web frontend; see Frontend/Khala.
+        let homeAssistant = KhalaShellView(server: server, initialPath: initialPath) { webViewController in
             coordinator.setFrontend(webViewController)
             Current.sceneManager.setWebViewController(webViewController)
         }
