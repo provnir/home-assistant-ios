@@ -392,7 +392,9 @@ class AppStoreConnect:
                 return {"_status": exc.code, "_errors": _apple_error_codes(exc)}
             hint = {401: " (key id, issuer id or .p8 rejected)",
                     403: " (the API key needs the Admin role)"}.get(exc.code, "")
-            fail(f"App Store Connect {method} {urllib.parse.urlsplit(url).path} -> HTTP {exc.code}{hint}")
+            codes = "; ".join(_apple_error_codes(exc))
+            fail(f"App Store Connect {method} {urllib.parse.urlsplit(url).path} -> HTTP {exc.code}{hint}"
+                 + (f" [{codes}]" if codes else ""))
         except (OSError, ValueError) as exc:
             fail(f"App Store Connect request failed ({type(exc).__name__})")
 
@@ -550,8 +552,10 @@ def manual_signing(apple, env, bundle, bundles, read_only, now):
         query = urllib.parse.urlencode({"filter[identifier]": bundle, "fields[bundleIds]": "identifier"})
         bundles = [b for b in apple.call(f"/v1/bundleIds?{query}")["data"] if b["attributes"]["identifier"] == bundle]
     bundle_id = bundles[0]["id"]
-    have = {c["attributes"].get("capabilityType")
-            for c in apple.all(f"/v1/bundleIds/{bundle_id}/bundleIdCapabilities?limit=200")["data"]}
+    app_id = apple.call(f"/v1/bundleIds/{bundle_id}?include=bundleIdCapabilities")
+    have = {c["attributes"].get("capabilityType") for c in app_id.get("included", [])
+            if c.get("type") == "bundleIdCapabilities"}
+    summary(f"- App ID capabilities on: {', '.join(sorted(have)) or 'none'}.")
     wanted = sorted({CAPABILITY_FOR[k] for k in entitlements if CAPABILITY_FOR.get(k)})
     for capability in [c for c in wanted if c not in have]:
         if read_only:
