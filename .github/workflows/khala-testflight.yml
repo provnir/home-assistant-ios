@@ -200,7 +200,7 @@ jobs:
     needs: [prepare, archive]
     if: ${{ !cancelled() && inputs.publish && !inputs.preflight_only && needs.archive.result == 'success' && needs.archive.outputs.ipa_artifact_id != '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     permissions:
       contents: read
       actions: write # delete this run's IPA artifact once it is on TestFlight
@@ -219,27 +219,40 @@ jobs:
           artifact-ids: ${{ needs.archive.outputs.ipa_artifact_id }}
           path: ${{ runner.temp }}/release
           digest-mismatch: error
-      - name: Verify the packaged app
+      - name: Verify the packaged app and App Store processing guards
         run: >-
           python3 Configuration/Khala/khala_ship.py verify-ipa --ipa "$RUNNER_TEMP/release/Khala.ipa"
           --team "$APPLE_TEAM_ID" --bundle-id "$BUNDLE_ID" --version "$SHORT_VERSION" --build "$BUILD_NUMBER"
-      - name: Upload to TestFlight and wait for Apple processing
-        timeout-minutes: 20
+      - name: Upload to TestFlight
+        timeout-minutes: 15
         uses: Apple-Actions/upload-testflight-build@5e75ff58276689011512ba87a381d93dc67dbcf8 # v5.3.0
         with:
           app-path: ${{ runner.temp }}/release/Khala.ipa
           app-type: ios
           backend: appstore-api
-          wait-for-processing: 'true'
+          # Our own poll below also reports INVALID; the action would only wait for VALID.
+          wait-for-processing: 'false'
           issuer-id: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
           api-key-id: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
           api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
       - name: Delete the IPA artifact
         # Only after a successful upload: a failed upload can still be retried by re-running
-        # this job alone, and the 1-day retention removes the artifact either way.
+        # this job alone, and the 1-day retention removes the artifact either way. Once uploaded,
+        # the build number is spent, so the IPA has no further use.
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT_ID: ${{ needs.archive.outputs.ipa_artifact_id }}
         run: |
           gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID"
-          echo "- Khala $SHORT_VERSION ($BUILD_NUMBER) is on TestFlight; IPA artifact deleted." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Khala $SHORT_VERSION ($BUILD_NUMBER) uploaded to App Store Connect; IPA artifact deleted." >> "$GITHUB_STEP_SUMMARY"
+      - name: Install App Store Connect client dependencies
+        run: python3 -m pip install --quiet 'pyjwt[crypto]==2.10.1'
+      - name: Wait for Apple processing (VALID or INVALID)
+        timeout-minutes: 30
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: >-
+          python3 Configuration/Khala/khala_ship.py processing --bundle-id "$BUNDLE_ID"
+          --version "$SHORT_VERSION" --build "$BUILD_NUMBER" --minutes 25

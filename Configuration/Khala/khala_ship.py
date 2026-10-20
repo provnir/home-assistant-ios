@@ -7,7 +7,8 @@ a fork-only edit (rebases onto upstream stay conflict-free):
   apply        write the git-ignored overrides xcconfig (team + bundle prefix), drop every
                app extension / watch app / mac launcher from the App target's dependencies
                and embed phases, strip applinks associated domains, set the display name,
-               and install the Khala icon over the upstream one. Idempotent.
+               install the Khala icon over the upstream one, and keep Siri vocabulary for
+               intents the trimmed app no longer supports out of the App bundle. Idempotent.
   verify       assert that `apply` produced exactly that (runs on Linux before any macOS
                minute is spent, and again on macOS before archiving).
   xcconfig     write the per-run signing/version xcconfig passed to `xcodebuild -xcconfig`.
@@ -16,7 +17,10 @@ a fork-only edit (rebases onto upstream stay conflict-free):
                enables the App ID capabilities and creates/refreshes the App Store profile.
   cert         one-time bootstrap: create (or find) the Apple Distribution certificate for a CSR
                whose private key never leaves the VPS, and print the public certificate.
-  verify-ipa   check the exported IPA's Info.plist and embedded profile on Linux.
+  processing   after the upload, poll App Store Connect until the build is VALID or INVALID.
+  verify-ipa   check the exported IPA's Info.plist and embedded profile on Linux, and guard against
+               App Store processing rejections the trim could cause (Siri vocabulary/intents,
+               extension/watch leftovers, purpose strings) before anything is uploaded.
 
 Apply/verify/xcconfig/export-options/verify-ipa use only the standard library. Credentials
 and Apple response bodies are never printed.
@@ -205,6 +209,146 @@ def remove_list_item(text, object_id):
     return pattern.sub("", text, count=1)
 
 
+def remove_entry_in_object(text, object_id, entry):
+    """Remove one list entry (e.g. a membership exception path) inside one object's block only."""
+    block = re.compile(rf"^([ \t]*){object_id}(?: /\*[^\n]*?\*/)? = \{{\n.*?^\1\}};\n", re.M | re.S)
+    match = block.search(text)
+    require(match is not None, f"pbxproj: object {object_id} not found as a block")
+    line = re.compile(rf'^[ \t]*"?{re.escape(entry)}"?,[ \t]*\n', re.M)
+    body, hits = line.subn("", match.group(0))
+    require(hits == 1, f"pbxproj: expected one entry {entry} in {object_id}, found {hits}")
+    return text[:match.start()] + body + text[match.end():]
+
+
+# --- Siri vocabulary ------------------------------------------------------------------
+# App Store processing rejects (ITMS-90626) a bundle whose AppIntentVocabulary.plist has
+# phrases for an intent nothing in the app supports. Upstream copies the Intents extension's
+# vocabulary (INShareFocusStatusIntent) into the App too; with that extension trimmed, the
+# only Siri intents left are the App's own Info.plist INIntentsSupported.
+
+VOCABULARY = "AppIntentVocabulary.plist"
+
+
+def project_paths(objects, project):
+    """Repo-relative path of every group / file reference reachable from the main group."""
+    paths, stack = {}, [(objects[project]["mainGroup"], "")]
+    while stack:
+        node_id, parent = stack.pop()
+        node = objects.get(node_id, {})
+        tree, path = node.get("sourceTree", "<group>"), node.get("path", "")
+        if tree == "<group>":
+            here = f"{parent}/{path}".strip("/") if path else parent
+        elif tree == "SOURCE_ROOT":
+            here = path
+        else:
+            continue
+        paths[node_id] = here
+        stack.extend((child, here) for child in node.get("children", []))
+    return paths
+
+
+def vocabulary_files(root, group_dir, entry):
+    """Files a synchronized-group entry names; "/Localized/<dir>/<file>" means every <dir>/*.lproj/<file>."""
+    if entry.startswith("/Localized/"):
+        rel = Path(entry[len("/Localized/"):])
+        return sorted((root / group_dir / rel.parent).glob(f"*.lproj/{rel.name}"))
+    return [root / group_dir / entry] if (root / group_dir / entry).is_file() else []
+
+
+def vocabulary_intents(path):
+    """Intent names a vocabulary file refers to (phrases and parameter vocabularies)."""
+    with open(path, "rb") as source:
+        data = plistlib.load(source)
+    names = {p.get("IntentName") for p in data.get("IntentPhrases", []) if p.get("IntentName")}
+    for vocabulary in data.get("ParameterVocabularies", []):
+        names |= {n.split(".", 1)[0] for n in vocabulary.get("ParameterNames", [])}
+    return names
+
+
+def app_intents_supported(root):
+    with (root / INFO_PLIST).open("rb") as source:
+        return set(plistlib.load(source).get("INIntentsSupported", []))
+
+
+def vocabulary_routes(objects, root):
+    """Every way an AppIntentVocabulary.plist reaches the App target, with the files it brings:
+    ("added", exception set, entry, files)  App exception in a synchronized group the App does not own
+    ("synced", group, None, files)          a synchronized group the App owns (minus its exclusions)
+    ("phase", build file, None, files)      an explicit Copy Bundle Resources entry
+    """
+    project = next(k for k, v in objects.items() if v.get("isa") == "PBXProject")
+    paths, app = project_paths(objects, project), app_target(objects)
+    owned = set(objects[app].get("fileSystemSynchronizedGroups", []))
+    routes = []
+    for group_id, group in objects.items():
+        if group.get("isa") != "PBXFileSystemSynchronizedRootGroup" or group_id not in paths:
+            continue
+        group_dir = paths[group_id]
+        app_sets = [e for e in group.get("exceptions", []) if objects[e].get("target") == app]
+        listed = [(e, entry) for e in app_sets for entry in objects[e].get("membershipExceptions", [])]
+        if group_id in owned:  # exceptions are exclusions
+            excluded = {f for _, entry in listed for f in vocabulary_files(root, group_dir, entry)}
+            files = [f for f in sorted((root / group_dir).rglob(VOCABULARY)) if f not in excluded]
+            if files:
+                routes.append(("synced", group_id, None, files))
+        else:  # exceptions are additions
+            routes += [("added", e, entry, vocabulary_files(root, group_dir, entry))
+                       for e, entry in listed if entry.rsplit("/", 1)[-1] == VOCABULARY]
+    for phase_id in objects[app]["buildPhases"]:
+        if objects[phase_id].get("isa") != "PBXResourcesBuildPhase":
+            continue
+        for build_file in objects[phase_id].get("files", []):
+            ref = objects[build_file].get("fileRef")
+            item = objects.get(ref, {})
+            refs = item.get("children", []) if item.get("isa") == "PBXVariantGroup" else [ref]
+            files = [root / paths[r] for r in refs if r in paths and paths[r].endswith(VOCABULARY)]
+            if files:
+                routes.append(("phase", build_file, None, files))
+    return routes
+
+
+def unsupported_vocabulary(objects, root):
+    supported = app_intents_supported(root)
+    rows = []
+    for kind, holder, entry, files in vocabulary_routes(objects, root):
+        extra = sorted({n for f in files for n in vocabulary_intents(f)} - supported)
+        if extra:
+            rows.append((kind, holder, entry, files, extra))
+    return rows
+
+
+def strip_vocabulary(path, supported):
+    with open(path, "rb") as source:
+        data = plistlib.load(source)
+    data["IntentPhrases"] = [p for p in data.get("IntentPhrases", []) if p.get("IntentName") in supported]
+    data["ParameterVocabularies"] = [v for v in data.get("ParameterVocabularies", [])
+                                     if all(n.split(".", 1)[0] in supported for n in v.get("ParameterNames", []))]
+    data = {k: v for k, v in data.items() if v != []}
+    with open(path, "wb") as out:
+        plistlib.dump(data, out, sort_keys=False)
+
+
+def trim_vocabulary(text, root):
+    """Keep Siri vocabulary for intents the trimmed App does not support out of the App bundle."""
+    objects = load_objects(text)
+    supported = app_intents_supported(root)
+    for kind, holder, entry, files, extra in unsupported_vocabulary(objects, root):
+        if kind == "added":
+            # Preferred: the App simply stops copying it (the files stay untouched).
+            text = remove_entry_in_object(text, holder, entry)
+            summary(f"- Siri vocabulary: App no longer copies {entry} ({len(files)} localizations; phrases for "
+                    f"{', '.join(extra)}, which the trimmed app does not support; INIntentsSupported is "
+                    f"{', '.join(sorted(supported)) or 'empty'}).")
+        else:
+            # Fallback: the file is part of an App-owned folder or a build phase, so it must keep
+            # existing; only the phrases for unsupported intents go.
+            for path in files:
+                strip_vocabulary(path, supported)
+            summary(f"- Siri vocabulary: stripped phrases for {', '.join(extra)} from {len(files)} "
+                    f"{VOCABULARY} file(s) the App ships ({kind} membership).")
+    return text
+
+
 # --- apply / verify -------------------------------------------------------------------
 
 def png_header(path):
@@ -238,6 +382,7 @@ def apply(args):
         text = remove_list_item(text, dep)
     for build_file, _path in drop_files:
         text = remove_list_item(text, build_file)
+    text = trim_vocabulary(text, root)
     project.write_text(text)
     for _dep, name in drop_deps:
         print(f"- App no longer builds/embeds {name}")
@@ -275,6 +420,8 @@ def verify(args):
     leftovers = [path for _, _, _, path in embedded_products(objects, app)
                  if path.endswith((".appex", ".app"))]
     require(not leftovers, f"App still embeds {leftovers}")
+    stray = [f"{entry or holder}: {extra}" for _, holder, entry, _, extra in unsupported_vocabulary(objects, root)]
+    require(not stray, f"App still ships Siri vocabulary for intents it does not support (ITMS-90626): {stray}")
 
     with (root / ENTITLEMENTS).open("rb") as source:
         entitlements = plistlib.load(source)
@@ -298,7 +445,8 @@ def verify(args):
             require((root / ICON_COMPOSER / "Assets" / layer["image-name"]).is_file(),
                     f"AppIcon.icon layer {layer['image-name']} is missing")
     summary(f"- Khala identity verified: team {args.team}, prefix {args.prefix}, display name {DISPLAY_NAME}, "
-            f"App embeds frameworks only ({', '.join(kept)}), no applinks, Khala icon installed.")
+            f"App embeds frameworks only ({', '.join(kept)}), no Siri vocabulary for unsupported intents, "
+            "no applinks, Khala icon installed.")
 
 
 # --- per-run xcodebuild inputs --------------------------------------------------------
@@ -658,6 +806,128 @@ def bootstrap_certificate(args):
 
 # --- exported IPA check (Linux) -------------------------------------------------------
 
+# Usage-description keys App Store processing (ITMS-90683) asks for when a binary links the
+# framework. Only frameworks whose APIs need exactly these keys; "any of" where one suffices.
+PURPOSE_KEYS = {
+    "HealthKit": ("NSHealthShareUsageDescription", "NSHealthUpdateUsageDescription"),
+    "CoreMotion": ("NSMotionUsageDescription",),
+    "Speech": ("NSSpeechRecognitionUsageDescription",),
+    "CoreBluetooth": ("NSBluetoothAlwaysUsageDescription",),
+    "CoreNFC": ("NFCReaderUsageDescription",),
+    "CoreLocation": ("NSLocationWhenInUseUsageDescription",),
+    "HomeKit": ("NSHomeKitUsageDescription",),
+    "AppTrackingTransparency": ("NSUserTrackingUsageDescription",),
+}  # Contacts is linked by Shared without a purpose string and Apple accepts it: not checked.
+PURPOSE_ANY = {
+    "EventKit": ("NSRemindersUsageDescription", "NSRemindersFullAccessUsageDescription",
+                 "NSCalendarsUsageDescription", "NSCalendarsFullAccessUsageDescription"),
+    "Photos": ("NSPhotoLibraryUsageDescription", "NSPhotoLibraryAddUsageDescription"),
+}
+WATCH_KEYS = ("WKCompanionAppBundleIdentifier", "WKWatchKitApp", "WKApplication", "WKAppBundleIdentifier",
+              "WKRunsIndependentlyOfCompanionApp", "WKWatchOnly")
+LOAD_DYLIB_COMMANDS = {0xC, 0x80000018, 0x8000001F, 0x20, 0x80000023}
+
+
+def linked_frameworks(binary):
+    """System framework names a Mach-O (thin or universal) loads."""
+    slices = [0]
+    if binary[:4] in (b"\xca\xfe\xba\xbe", b"\xca\xfe\xba\xbf"):  # fat, big-endian header
+        count, wide = struct.unpack(">I", binary[4:8])[0], binary[3] == 0xBF
+        step = 32 if wide else 20
+        slices = [struct.unpack(">Q" if wide else ">I",
+                                binary[8 + i * step + 8: 8 + i * step + (16 if wide else 12)])[0]
+                  for i in range(count)]
+    names = set()
+    for base in slices:
+        if binary[base:base + 4] != b"\xcf\xfa\xed\xfe":  # MH_MAGIC_64, little-endian
+            continue
+        ncmds = struct.unpack_from("<I", binary, base + 16)[0]
+        cursor = base + 32
+        for _ in range(ncmds):
+            cmd, size = struct.unpack_from("<II", binary, cursor)
+            if cmd in LOAD_DYLIB_COMMANDS:
+                offset = struct.unpack_from("<I", binary, cursor + 8)[0]
+                raw = binary[cursor + offset: cursor + size].split(b"\0", 1)[0].decode(errors="replace")
+                match = re.search(r"/System/Library/(?:Private)?Frameworks/([^/]+)\.framework/", raw)
+                if match:
+                    names.add(match.group(1))
+            cursor += size
+    return names
+
+
+def store_checks(ipa, app, names, info):
+    """App Store processing rejections our target trim could cause, checked from the IPA alone.
+    Returns (problems, what was checked)."""
+    problems = []
+    # Extensions/watch: none may remain, and the App must not claim to be one.
+    leftovers = sorted({n[len(app):].split("/", 1)[0] for n in names if n.startswith(app) and
+                        n[len(app):].split("/", 1)[0] in ("PlugIns", "Extensions", "Watch", "AppClips")})
+    if leftovers:
+        problems.append(f"bundle still contains {leftovers}")
+    stray = sorted(k for k in info if k.startswith("NSExtension") or k in WATCH_KEYS)
+    if stray:
+        problems.append(f"app Info.plist carries extension/watch keys {stray}")
+
+    # Siri (ITMS-90626): every intent named in vocabulary or restrictions must be supported, and
+    # with no extensions left only the App's own INIntentsSupported counts.
+    supported = set(info.get("INIntentsSupported", []))
+    for key in ("INIntentsRestrictedWhileLocked", "INIntentsRestrictedWhileProtectedDataUnavailable"):
+        extra = sorted(set(info.get(key, [])) - supported)
+        if extra:
+            problems.append(f"{key} names unsupported intents {extra}")
+    vocabularies = [n for n in names if n.startswith(app) and n.rsplit("/", 1)[-1] == VOCABULARY]
+    bad_vocabulary = {}
+    for name in vocabularies:
+        data = plistlib.loads(ipa.read(name))
+        used = {p.get("IntentName") for p in data.get("IntentPhrases", []) if p.get("IntentName")}
+        for vocabulary in data.get("ParameterVocabularies", []):
+            used |= {n.split(".", 1)[0] for n in vocabulary.get("ParameterNames", [])}
+        extra = tuple(sorted(used - supported))
+        if extra:
+            bad_vocabulary.setdefault(extra, []).append(name[len(app):])
+    for extra, files in bad_vocabulary.items():
+        problems.append(f"{len(files)} {VOCABULARY} file(s) ({', '.join(sorted(files)[:3])}...) have phrases for "
+                        f"intents the app does not support {list(extra)} (ITMS-90626)")
+
+    # Intents the App claims must have something to handle them in the binaries.
+    executable = info.get("CFBundleExecutable", "")
+    binaries = [app + executable] + sorted(
+        n for n in names if re.fullmatch(re.escape(app) + r"Frameworks/([^/]+)\.framework/\1", n))
+    blobs = {n: ipa.read(n) for n in binaries if n in names}
+    if app + executable not in blobs:
+        problems.append(f"main executable {executable!r} missing")
+    if supported:
+        code = b"".join(blobs.values())
+        for intent in sorted(supported):
+            system = re.fullmatch(r"IN[A-Z][A-Za-z]+Intent", intent) is not None
+            needle = b"handlerForIntent" if system else intent.encode()
+            if needle not in code:
+                problems.append(f"INIntentsSupported names {intent} but no binary "
+                                f"{'implements application:handlerForIntent:' if system else 'defines it'}")
+
+    # Purpose strings (ITMS-90683): present and non-empty for every linked framework that needs one.
+    linked = set()
+    for blob in blobs.values():
+        linked |= linked_frameworks(blob)
+    empty = sorted(k for k, v in info.items() if k.endswith("UsageDescription") and not (isinstance(v, str) and v.strip()))
+    if empty:
+        problems.append(f"empty purpose strings {empty}")
+    for framework in sorted(linked & set(PURPOSE_KEYS)):
+        missing = [k for k in PURPOSE_KEYS[framework] if not info.get(k)]
+        if missing:
+            problems.append(f"links {framework} but Info.plist lacks {missing} (ITMS-90683)")
+    for framework in sorted(linked & set(PURPOSE_ANY)):
+        if not any(info.get(k) for k in PURPOSE_ANY[framework]):
+            problems.append(f"links {framework} but Info.plist has none of {list(PURPOSE_ANY[framework])} (ITMS-90683)")
+
+    checked = (f"{len(vocabularies)} Siri vocabulary file(s), INIntentsSupported {sorted(supported)}, "
+               f"{len(blobs)} binaries linking {len(linked & (set(PURPOSE_KEYS) | set(PURPOSE_ANY)))} "
+               "purpose-string frameworks, no extension/watch keys")
+    if any(n.startswith(app + "gallery.ckcomplication/") for n in names):
+        checked += "; note: watch complication gallery (gallery.ckcomplication) still ships, harmless without a watch app"
+    return problems, checked
+
+
 def verify_ipa(args):
     with zipfile.ZipFile(args.ipa) as ipa:
         names = ipa.namelist()
@@ -668,6 +938,9 @@ def verify_ipa(args):
         info = plistlib.loads(ipa.read(app + "Info.plist"))
         nested = [n for n in names if n.startswith(app) and (n.startswith(app + "PlugIns/") or n.startswith(app + "Watch/"))]
         profile = ipa.read(app + "embedded.mobileprovision")
+        problems, checked = store_checks(ipa, app, names, info)
+    require(not problems, "packaged app would be rejected by App Store processing:\n  "
+            + "\n  ".join(problems))
     expected = {"CFBundleIdentifier": args.bundle_id, "CFBundleShortVersionString": args.version,
                 "CFBundleVersion": args.build, "CFBundleDisplayName": DISPLAY_NAME}
     for key, value in expected.items():
@@ -683,6 +956,44 @@ def verify_ipa(args):
             "embedded profile is not an App Store distribution profile")
     summary(f"- Packaged IPA verified: {args.bundle_id} {args.version} ({args.build}), display name "
             f"{DISPLAY_NAME}, no extensions, App Store profile \"{provision.get('Name')}\".")
+    summary(f"- App Store processing guards passed: {checked}.")
+
+
+# --- App Store Connect build processing (Linux) -------------------------------------------
+
+def processing(args):
+    """Poll one uploaded build until Apple's processing is VALID or INVALID (the upload action only
+    waits for VALID, so a rejected build would just time out there). Apple's API gives the state,
+    not the ITMS reason: that arrives by email."""
+    apple = AppStoreConnect(os.environ)
+    apps = apple.call("/v1/apps?" + urllib.parse.urlencode({"filter[bundleId]": args.bundle_id, "fields[apps]": "bundleId"}))
+    apps = [a for a in apps.get("data", []) if a["attributes"]["bundleId"] == args.bundle_id]
+    require(apps, f"no App Store Connect app record for {args.bundle_id}")
+    query = urllib.parse.urlencode({
+        "filter[app]": apps[0]["id"], "filter[version]": args.build, "filter[preReleaseVersion.version]": args.version,
+        "filter[preReleaseVersion.platform]": "IOS", "fields[builds]": "version,processingState,uploadedDate",
+        "limit": 1})
+    deadline, state, last = time.time() + args.minutes * 60, None, None
+    while True:
+        apple = AppStoreConnect(os.environ)  # tokens live 19 minutes; one per poll is cheap
+        builds = apple.call(f"/v1/builds?{query}").get("data", [])
+        state = builds[0]["attributes"].get("processingState") if builds else "NOT_LISTED_YET"
+        if state != last:
+            print(f"{datetime.now(timezone.utc):%H:%M:%S}Z build {args.version} ({args.build}): {state}", flush=True)
+            last = state
+        if state in ("VALID", "INVALID", "FAILED") or time.time() > deadline:
+            break
+        time.sleep(30)
+    emit("processing_state", state)
+    if state == "VALID":
+        summary(f"- App Store Connect processing: **VALID**, Khala {args.version} ({args.build}) is ready in TestFlight.")
+    elif state in ("INVALID", "FAILED"):
+        summary(f"- App Store Connect processing: **{state}** for {args.version} ({args.build}). Apple's email names "
+                "the ITMS reason (the API does not expose it).")
+        fail(f"App Store Connect processing ended {state}")
+    else:
+        summary(f"- App Store Connect processing still {state} after {args.minutes} min; not failing the run. "
+                "Apple emails the result.")
 
 
 def main():
@@ -707,12 +1018,16 @@ def main():
     command.add_argument("--bundle-id", required=True)
     command.add_argument("--read-only", action="store_true")
     commands.add_parser("cert")
+    command = commands.add_parser("processing")
+    for flag in ("--bundle-id", "--version", "--build"):
+        command.add_argument(flag, required=True)
+    command.add_argument("--minutes", type=int, default=25)
     command = commands.add_parser("verify-ipa")
     for flag in ("--ipa", "--team", "--bundle-id", "--version", "--build"):
         command.add_argument(flag, required=True)
     args = parser.parse_args()
     {"apply": apply, "verify": verify, "xcconfig": write_xcconfig, "export-options": export_options,
-     "asc": asc, "cert": bootstrap_certificate, "verify-ipa": verify_ipa}[args.command](args)
+     "asc": asc, "cert": bootstrap_certificate, "verify-ipa": verify_ipa, "processing": processing}[args.command](args)
 
 
 if __name__ == "__main__":
