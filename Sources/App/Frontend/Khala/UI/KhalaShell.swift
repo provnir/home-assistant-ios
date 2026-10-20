@@ -16,32 +16,13 @@ enum KhalaShell {
     /// `sidebar/show` — back to the app as `sidebar/show` (`NativeTabBarState.requestMore()`), which opens
     /// Khala's menu. See home-assistant/frontend `src/layouts/home-assistant-main.ts` (`_externalSidebar`).
     ///
-    /// `hasSidebar` also hides the frontend's header menu button (`ha-menu-button`), which would leave the web
-    /// UI with no visible way back to the menu. This script keeps that button showing — in the header's own
-    /// leading slot, where it never covers a title or a back arrow — so it becomes Khala's menu button on the
-    /// web pages. It sets the button's `_alwaysVisible` (the frontend's own "show anyway" switch) before every
-    /// update. If a future frontend renames it, the button just stays hidden and the edge swipe still opens
-    /// the menu.
+    /// With `hasSidebar` the frontend also hides its header menu button (`ha-menu-button`). That is fine: on the
+    /// web UI Khala draws its own header (`KhalaDashboardHeaderView`, pinned menu button included) and the
+    /// frontend's dashboard toolbar is hidden by `KhalaFrontendScript`, which this user script installs. See
+    /// that type for what it relies on in the frontend and how it fails soft.
     @MainActor static var frontendUserScript: WKUserScript {
         WKUserScript(
-            source: """
-            (() => {
-                const keepMenuButton = () => {
-                    const button = customElements.get("ha-menu-button");
-                    const proto = button && button.prototype;
-                    if (!proto || proto.__khalaPatched || typeof proto.willUpdate !== "function") { return; }
-                    const willUpdate = proto.willUpdate;
-                    proto.willUpdate = function (changed) {
-                        this._alwaysVisible = true;
-                        return willUpdate.call(this, changed);
-                    };
-                    proto.__khalaPatched = true;
-                };
-                if (window.customElements) {
-                    customElements.whenDefined("ha-menu-button").then(keepMenuButton);
-                }
-            })();
-            """,
+            source: KhalaFrontendScript.source(),
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         )

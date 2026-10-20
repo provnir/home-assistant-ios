@@ -4,9 +4,10 @@ import SwiftUI
 import UIKit
 
 /// Khala's root for a connected server: a menu panel underneath and the screen card above it (the Zoe app's phone
-/// drawer pattern). The card shows Today, the interim native screens, or — for Dashboards — the app's stock web
-/// frontend, which stays mounted underneath the native screens the whole time so deep links, notifications,
-/// Settings and the camera player keep working exactly as upstream wires them.
+/// drawer pattern). The card shows Today, the native screens, or — for Dashboards — the app's web frontend under
+/// Khala's own header (`KhalaDashboardHeaderView`; the frontend's toolbar is hidden). The frontend stays mounted
+/// underneath the native screens the whole time so deep links, notifications, Settings and the camera player keep
+/// working exactly as upstream wires them.
 ///
 /// Same initializer as `HomeAssistantView`, so hooking it in is a one-word change in `ContainerView`. Off on Mac
 /// Catalyst and in kiosk mode, where it is just the web frontend.
@@ -141,6 +142,14 @@ struct KhalaShellView: View {
             devices: home.devices,
             isOpen: shell.isMenuOpen,
             searchFocusRequest: searchFocusRequest,
+            dashboards: shell.dashboards,
+            dashboardIcons: shell.dashboardIcons,
+            highlightedDashboardId: shell.highlightedDashboardId,
+            onDashboard: { dashboard in
+                withAnimation(settleAnimation) {
+                    shell.openDashboard(dashboard)
+                }
+            },
             onSelect: { destination in
                 withAnimation(settleAnimation) {
                     shell.destination = destination
@@ -186,10 +195,23 @@ struct KhalaShellView: View {
                 .transition(.opacity)
             }
 
-            // Pinned top-leading in the safe area on every native screen, above the content and never part of
-            // its flow. On the web UI the frontend's own header button is the menu button instead (see
-            // `KhalaShell.frontendUserScript`): a floating button there would cover its titles and back arrows.
-            if shell.destination != .dashboards {
+            // Over the web UI: Khala's own header in place of the frontend's (hidden by `KhalaFrontendScript`),
+            // once the frontend is up — the stand-by screen covers everything before that.
+            if showsDashboardHeader {
+                KhalaDashboardHeaderView(
+                    header: shell.dashboardHeader,
+                    icons: shell.dashboardIcons,
+                    onBack: { shell.goBackInFrontend() },
+                    onDashboard: { shell.openDashboard($0) },
+                    onView: { view, prefix in shell.openView(view, prefix: prefix) },
+                    onAction: { shell.perform($0) }
+                )
+                .transition(.opacity)
+            }
+
+            // Pinned top-leading in the safe area on every screen (the dashboards header leaves its slot free),
+            // above the content and never part of its flow.
+            if shell.destination != .dashboards || showsDashboardHeader {
                 KhalaGlassButton(symbol: .sidebarLeft, accessibilityLabel: KhalaText.openMenu) {
                     settle(open: true)
                 }
@@ -218,6 +240,10 @@ struct KhalaShellView: View {
                 .accessibilityLabel(KhalaText.closeMenu)
                 .accessibilityAddTraits(.isButton)
         }
+    }
+
+    private var showsDashboardHeader: Bool {
+        shell.destination == .dashboards && shell.isFrontendReady
     }
 
     /// Where the shell pins the menu button inside the safe area. Native screens leave room for it above their

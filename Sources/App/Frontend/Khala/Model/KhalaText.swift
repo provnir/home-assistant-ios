@@ -11,6 +11,9 @@ enum KhalaText {
     static let dashboards = "Dashboards"
     static let settings = "Settings"
     static let devices = "DEVICES"
+    static let dashboardsSection = "DASHBOARDS"
+    static let views = "Views"
+    static let chooseDashboard = "Choose a dashboard or view"
     static let search = "Search"
     static let openMenu = "Open menu"
     static let closeMenu = "Close menu"
@@ -35,6 +38,11 @@ enum KhalaText {
     static let label = "Label"
     static let role = "Role"
     static let done = "Done"
+
+    /// An untitled view's name when the frontend gave none.
+    static func view(number: Int) -> String {
+        "View \(number)"
+    }
 
     static func cameraCount(_ count: Int) -> String {
         count == 1 ? "1 camera" : "\(count) cameras"

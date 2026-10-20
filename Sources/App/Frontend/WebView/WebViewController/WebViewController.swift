@@ -187,6 +187,9 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
     /// Khala: set while a native screen covers the frontend, so the status bar reads on that screen.
     var statusBarStyleOverride: UIStatusBarStyle?
 
+    /// Khala: what the frontend reports to the native dashboards header (registered only while the shell is on).
+    let khalaBridge = KhalaFrontendBridge()
+
     override var preferredStatusBarStyle: UIStatusBarStyle {
         statusBarStyleOverride ?? underlyingPreferredStatusBarStyle
     }
@@ -354,7 +357,12 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
         ))
 
         if KhalaShell.isEnabled {
+            // Khala: the native dashboards header's script and its reports (`KhalaFrontendScript`).
             userContentController.addUserScript(KhalaShell.frontendUserScript)
+            userContentController.add(
+                SafeScriptMessageHandler(server: server, delegate: khalaBridge),
+                name: KhalaFrontendScript.messageHandlerName
+            )
         }
 
         userContentController.addUserScript(.init(

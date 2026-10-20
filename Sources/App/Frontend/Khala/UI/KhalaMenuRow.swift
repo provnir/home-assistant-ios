@@ -1,5 +1,6 @@
 import SFSafeSymbols
 import SwiftUI
+import UIKit
 
 /// A 48 pt row of the Khala menu: a destination (plain glyph), a device (glyph in a tinted circle) or Settings.
 /// The selected destination sits on a white platter.
@@ -9,6 +10,9 @@ struct KhalaMenuRow: View {
     let symbolColor: Color
     /// When set, the glyph sits in a 28 pt circle of this colour (device rows).
     var chipTint: Color?
+    /// Drawn instead of `symbol` when set (a dashboard's Material Design icon from Home Assistant), as a template
+    /// in `symbolColor`.
+    var image: UIImage?
     var trailing: String?
     var isSelected = false
     let action: () -> Void
@@ -25,6 +29,13 @@ struct KhalaMenuRow: View {
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundStyle(symbolColor)
                         )
+                } else if let image {
+                    Image(uiImage: image)
+                        .renderingMode(.template)
+                        .resizable()
+                        .scaledToFit()
+                        .foregroundStyle(symbolColor)
+                        .frame(width: 22, height: 22)
                 } else {
                     Image(systemSymbol: symbol)
                         .font(.system(size: 18, weight: .medium))

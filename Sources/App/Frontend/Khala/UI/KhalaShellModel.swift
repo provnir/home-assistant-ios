@@ -27,16 +27,41 @@ final class KhalaShellModel: ObservableObject {
     @Published var returnDestination: KhalaDestination = .today
     @Published var sheet: KhalaSheetRequest?
 
-    /// The web frontend is up (connected or loaded), so its header — with the menu button `KhalaShell`'s script
-    /// keeps there — is on screen. While it isn't (loading, offline), the shell's own edge swipe stands in.
-    @Published private(set) var isFrontendReady = false
+    /// The web frontend is up (connected or loaded), so the native dashboards header is drawn over it. While it
+    /// isn't (loading, offline) the stand-by screen covers it and the shell's own edge swipe stands in.
+    @Published private(set) var isFrontendReady = false {
+        didSet { applyStatusBarStyle() }
+    }
 
-    /// The frontend asked for the app's menu (its header button, or the app's edge swipe bounced back as
-    /// `sidebar/show`). The view opens the drawer with its own animation.
+    // MARK: Dashboards (`KhalaShellModel+Dashboards`)
+
+    /// The user's dashboards, as Home Assistant's own sidebar lists them (order, hidden panels, default first).
+    @Published private(set) var dashboards: [KhalaDashboard] = []
+    /// Their sidebar icons, by `KhalaDashboard.id`.
+    private(set) var dashboardIcons: [String: FrontendIcon] = [:]
+    /// The frontend page on screen (the app's URL observation).
+    @Published private(set) var frontendPath: String? {
+        didSet { rememberDashboard() }
+    }
+    /// What `KhalaFrontendScript` last reported: views, dialog, actions.
+    @Published private(set) var frontendState: KhalaFrontendState? {
+        didSet { rememberDashboard() }
+    }
+    /// The frontend's more-info dialog is up (external bus `more_info/opened`).
+    @Published private(set) var isMoreInfoOpen = false
+    /// The dashboard last on screen, where the "Dashboards" destination and a dead-end back return to.
+    private(set) var lastDashboardId: String?
+    /// Home Assistant's sidebar, mirrored by the app's own `MacSidebarViewModel` (also behind the App Labs tab
+    /// bar): panels, the user's order and hidden panels, the default dashboard. Created on the first attach.
+    private var sidebar: MacSidebarViewModel?
+    private var sidebarObservation: AnyCancellable?
+
+    /// The frontend asked for the app's menu (the app's edge swipe on the web UI, bounced back as `sidebar/show`).
+    /// The view opens the drawer with its own animation.
     let menuRequests = PassthroughSubject<Void, Never>()
 
     let server: Server
-    private weak var webViewController: WebViewController?
+    private(set) weak var webViewController: WebViewController?
     private var cancellables = Set<AnyCancellable>()
     private var frontendMenuRequest: AnyCancellable?
 
@@ -69,15 +94,34 @@ final class KhalaShellModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.isFrontendReady = $0 }
             .store(in: &cancellables)
+        controller.overlayState?.$currentPath
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.frontendPath = $0 }
+            .store(in: &cancellables)
+        controller.overlayState?.$isMoreInfoDialogOpen
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.isMoreInfoOpen = $0 }
+            .store(in: &cancellables)
+        controller.khalaBridge.state
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.frontendState = $0 }
+            .store(in: &cancellables)
+        if let overlayState = controller.overlayState {
+            startDashboards(overlayState: overlayState)
+        }
         applyStatusBarStyle()
     }
 
     /// The web view's controller decides the status-bar style for the whole window (SwiftUI defers to it). Over
-    /// Khala's own ground — a native screen, or the menu — the system default (ink in light mode) is the one
-    /// that reads; on the web UI the frontend's theme decides again.
+    /// Khala's own chrome — a native screen, the menu, or the native header over the web UI — the system default
+    /// (ink in light mode) is the one that reads; only while the frontend isn't up (stand-by) does its theme
+    /// decide.
     private func applyStatusBarStyle() {
         guard let webViewController else { return }
-        let style: UIStatusBarStyle? = destination == .dashboards && !isMenuOpen ? nil : .default
+        let style: UIStatusBarStyle? = destination == .dashboards && !isMenuOpen && !isFrontendReady ? nil : .default
         guard webViewController.statusBarStyleOverride != style else { return }
         webViewController.statusBarStyleOverride = style
         webViewController.setNeedsStatusBarAppearanceUpdate()
@@ -101,6 +145,48 @@ final class KhalaShellModel: ObservableObject {
                 if view.layer.cornerRadius == 0 { view.layer.masksToBounds = false }
             }
         )
+    }
+
+    /// Starts mirroring Home Assistant's sidebar into `dashboards` (once per shell).
+    private func startDashboards(overlayState: WebFrontendOverlayState) {
+        guard sidebar == nil else { return }
+        let sidebar = MacSidebarViewModel(server: server, overlayState: overlayState)
+        // Legacy per-browser sidebar settings the frontend still honours; same reader as `HomeAssistantViewModel`.
+        sidebar.readLocalStorage = { [weak self] key, completion in
+            guard let webViewController = self?.webViewController else {
+                completion(nil)
+                return
+            }
+            webViewController.evaluateJavaScript("window.localStorage.getItem('\(key)')") { result, _ in
+                completion(result as? String)
+            }
+        }
+        sidebarObservation = sidebar.$mainItems
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] items in self?.setDashboards(items) }
+        self.sidebar = sidebar
+        sidebar.start()
+    }
+
+    private func setDashboards(_ items: [MacSidebarItem]) {
+        var icons: [String: FrontendIcon] = [:]
+        let dashboards = items.compactMap { item -> KhalaDashboard? in
+            guard case .panel = item.kind else { return nil }
+            icons[item.id] = item.icon
+            return KhalaDashboard(id: item.id, title: item.title)
+        }
+        dashboardIcons = icons
+        if self.dashboards != dashboards {
+            self.dashboards = dashboards
+        }
+        rememberDashboard()
+    }
+
+    private func rememberDashboard() {
+        let path = frontendState?.path ?? frontendPath
+        if let id = KhalaFrontendPath.dashboard(for: path, in: dashboards)?.id {
+            lastDashboardId = id
+        }
     }
 
     /// Opens Home Assistant's more-info dialog for an entity in the web UI.

@@ -1,4 +1,5 @@
 import SFSafeSymbols
+import Shared
 import SwiftUI
 
 /// The main menu, revealed under the screen card (mockup `DayMenu`): who/where, a search field, the destinations,
@@ -16,6 +17,12 @@ struct KhalaMenuView: View {
     let isOpen: Bool
     /// Bumped by the shell to put the cursor in the search field (Today's search button).
     let searchFocusRequest: Int
+    /// The DASHBOARDS section: Home Assistant's sidebar panels, opened in the web UI under Khala's header.
+    var dashboards: [KhalaDashboard] = []
+    var dashboardIcons: [String: FrontendIcon] = [:]
+    /// The dashboard on screen while the web UI is (its row is the highlighted one, not "Dashboards").
+    var highlightedDashboardId: String?
+    var onDashboard: (KhalaDashboard) -> Void = { _ in }
     let onSelect: (KhalaDestination) -> Void
     let onDevice: (KhalaDevice) -> Void
     let onEditDevices: () -> Void
@@ -30,6 +37,7 @@ struct KhalaMenuView: View {
             query.isEmpty || $0.title.localizedCaseInsensitiveContains(query)
         }
         let shownDevices = devices.filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }
+        let shownDashboards = KhalaDashboard.matching(query, in: dashboards)
 
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 10) {
@@ -87,17 +95,34 @@ struct KhalaMenuView: View {
                             symbol: KhalaTheme.symbol(item),
                             symbolColor: item == .cameras ? KhalaTheme.accent(.security) : KhalaTheme.ink,
                             trailing: trailing(for: item),
+                            // A listed dashboard on screen highlights its own row below instead.
                             isSelected: item == destination.menuHighlight
+                                && !(item == .dashboards && highlightedDashboardId != nil)
                         ) {
                             onSelect(item)
                         }
                     }
 
+                    if !shownDashboards.isEmpty {
+                        sectionHeader(KhalaText.dashboardsSection)
+                        ForEach(shownDashboards) { dashboard in
+                            KhalaMenuRow(
+                                title: dashboard.title,
+                                symbol: .squareGrid2x2,
+                                symbolColor: KhalaTheme.ink,
+                                image: dashboardIcons[dashboard.id]?.image(
+                                    ofSize: CGSize(width: 22, height: 22),
+                                    color: .label
+                                ),
+                                isSelected: dashboard.id == highlightedDashboardId
+                            ) {
+                                onDashboard(dashboard)
+                            }
+                        }
+                    }
+
                     HStack {
-                        Text(KhalaText.devices)
-                            .font(KhalaTheme.caption)
-                            .kerning(1)
-                            .foregroundStyle(KhalaTheme.muted)
+                        sectionTitle(KhalaText.devices)
                         Spacer()
                         Button(KhalaText.editDevices, action: onEditDevices)
                             .font(.system(size: 13, weight: .semibold))
@@ -146,6 +171,22 @@ struct KhalaMenuView: View {
             search = ""
             isSearchFocused = false
         }
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(KhalaTheme.caption)
+            .kerning(1)
+            .foregroundStyle(KhalaTheme.muted)
+    }
+
+    /// A section's caption, spaced like the DEVICES one.
+    private func sectionHeader(_ title: String) -> some View {
+        sectionTitle(title)
+            .frame(maxWidth: .infinity, minHeight: 22, alignment: .leading)
+            .padding(.leading, 12)
+            .padding(.top, 16)
+            .padding(.bottom, 4)
     }
 
     private func trailing(for destination: KhalaDestination) -> String? {
