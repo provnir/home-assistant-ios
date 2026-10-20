@@ -11,16 +11,50 @@ cd "$ROOT"
 
 python3 "$SHIP" apply --team "$APPLE_TEAM_ID" --prefix "$BUNDLE_ID_PREFIX"
 python3 "$SHIP" xcconfig --mode "$SIGNING" --team "$APPLE_TEAM_ID" --version "$SHORT_VERSION" \
-    --build "$BUILD_NUMBER" --profile "${PROFILE_NAME:-}" --out "$RUNNER_TEMP/khala.xcconfig"
+    --build "$BUILD_NUMBER" --profile "${PROFILE_UUID:-}" --out "$RUNNER_TEMP/khala.xcconfig"
 python3 "$SHIP" export-options --mode "$SIGNING" --team "$APPLE_TEAM_ID" --bundle-id "$BUNDLE_ID" \
-    --profile "${PROFILE_NAME:-}" --out "$RUNNER_TEMP/ExportOptions.plist"
+    --profile "${PROFILE_UUID:-}" --out "$RUNNER_TEMP/ExportOptions.plist"
+
+KEY_DIR="$RUNNER_TEMP/asc-key"
+KEYCHAIN="$RUNNER_TEMP/khala-signing.keychain-db"
+P12="$RUNNER_TEMP/khala-dist.p12"
+cleanup() {
+    rm -rf "$KEY_DIR" "$P12"
+    [[ -f "$KEYCHAIN" ]] && security delete-keychain "$KEYCHAIN" 2>/dev/null || true
+}
+trap cleanup EXIT
 
 auth=()
-if [[ "$SIGNING" == cloud ]]; then
+if [[ "$SIGNING" == manual ]]; then
+    : "${APPSTORE_DIST_P12_BASE64:?}" "${APPSTORE_DIST_P12_PASSWORD:?}" "${PROFILE_UUID:?}" "${PROFILE_B64:?}"
+    # Throwaway keychain with a random password: the distribution key lives only here and only
+    # for this job (deleted on exit). Never Xcode's own Apple login.
+    KC_PASS=$(openssl rand -hex 24)
+    (umask 077 && printf '%s' "$APPSTORE_DIST_P12_BASE64" | base64 --decode > "$P12")
+    security create-keychain -p "$KC_PASS" "$KEYCHAIN"
+    security set-keychain-settings -lut 21600 "$KEYCHAIN"
+    security unlock-keychain -p "$KC_PASS" "$KEYCHAIN"
+    security import "$P12" -k "$KEYCHAIN" -f pkcs12 -P "$APPSTORE_DIST_P12_PASSWORD" \
+        -T /usr/bin/codesign -T /usr/bin/security >/dev/null
+    rm -f "$P12"
+    for ca in AppleWWDRCAG3 AppleWWDRCAG6; do  # intermediates; harmless if already on the image
+        curl -fsSL "https://www.apple.com/certificateauthority/$ca.cer" -o "$RUNNER_TEMP/$ca.cer" &&
+            security import "$RUNNER_TEMP/$ca.cer" -k "$KEYCHAIN" >/dev/null 2>&1 || true
+    done
+    security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KC_PASS" "$KEYCHAIN" >/dev/null 2>&1
+    # shellcheck disable=SC2046  # keychain paths on the runner carry no spaces
+    security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+    security find-identity -v -p codesigning "$KEYCHAIN" | grep 'Apple Distribution' >/dev/null ||
+        { echo '::error::the P12 holds no valid Apple Distribution identity'; exit 1; }
+    echo "Signing identity ready in a throwaway keychain."
+    for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" \
+               "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+        mkdir -p "$dir"
+        printf '%s' "$PROFILE_B64" | base64 --decode > "$dir/$PROFILE_UUID.mobileprovision"
+    done
+elif [[ "$SIGNING" == cloud ]]; then
     : "${APP_STORE_CONNECT_KEY_ID:?}" "${APP_STORE_CONNECT_ISSUER_ID:?}" "${APP_STORE_CONNECT_PRIVATE_KEY:?}"
-    KEY_DIR="$RUNNER_TEMP/asc-key"
     mkdir -p "$KEY_DIR" && chmod 700 "$KEY_DIR"
-    trap 'rm -rf "$KEY_DIR"' EXIT
     KEY_PATH="$KEY_DIR/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
     (umask 077 && printf '%s\n' "$APP_STORE_CONNECT_PRIVATE_KEY" > "$KEY_PATH")
     # Automatic signing through the API key: the archive is signed with an Apple Development

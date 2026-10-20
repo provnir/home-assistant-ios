@@ -12,7 +12,10 @@ a fork-only edit (rebases onto upstream stay conflict-free):
                minute is spent, and again on macOS before archiving).
   xcconfig     write the per-run signing/version xcconfig passed to `xcodebuild -xcconfig`.
   export-options  write ExportOptions.plist for `xcodebuild -exportArchive`.
-  asc          App Store Connect preflight on Linux (needs PyJWT[crypto]).
+  asc          App Store Connect preflight on Linux (needs PyJWT[crypto]); in manual mode it also
+               enables the App ID capabilities and creates/refreshes the App Store profile.
+  cert         one-time bootstrap: create (or find) the Apple Distribution certificate for a CSR
+               whose private key never leaves the VPS, and print the public certificate.
   verify-ipa   check the exported IPA's Info.plist and embedded profile on Linux.
 
 Apply/verify/xcconfig/export-options/verify-ipa use only the standard library. Credentials
@@ -301,7 +304,7 @@ def verify(args):
 # --- per-run xcodebuild inputs --------------------------------------------------------
 
 def write_xcconfig(args):
-    require(args.mode in ("cloud", "p12"), "signing mode must be cloud or p12")
+    require(args.mode in ("cloud", "manual"), "signing mode must be cloud or manual")
     require(re.fullmatch(r"[0-9]+(\.[0-9]+){0,2}", args.version), "MARKETING_VERSION must be x[.y[.z]]")
     require(re.fullmatch(r"[1-9][0-9]*(\.[0-9]+){0,2}", args.build), "build number must be x[.y[.z]]")
     lines = [
@@ -319,7 +322,7 @@ def write_xcconfig(args):
         # cloud-signs with the team's cloud-managed Apple Distribution certificate.
         style, identity, profile = "Automatic", "Apple Development", ""
     else:
-        require(args.profile, "p12 signing needs the App Store profile name from prepare")
+        require(args.profile, "manual signing needs the App Store profile UUID from prepare")
         # Only the App target gets a profile; frameworks and package targets resolve to empty.
         style, identity = "Manual", "Apple Distribution"
         profile = "$(KHALA_PROFILE_$(TARGET_NAME:c99extidentifier))"
@@ -337,7 +340,7 @@ def export_options(args):
     if args.mode == "cloud":
         options["signingStyle"] = "automatic"
     else:
-        require(args.profile and args.bundle_id, "p12 export needs the bundle id and profile name")
+        require(args.profile and args.bundle_id, "manual export needs the bundle id and profile UUID")
         options.update(signingStyle="manual", signingCertificate="Apple Distribution",
                        provisioningProfiles={args.bundle_id: args.profile})
     with open(args.out, "wb") as out:
@@ -345,6 +348,15 @@ def export_options(args):
 
 
 # --- App Store Connect preflight (Linux) ----------------------------------------------
+
+def _apple_error_codes(exc):
+    """Apple's error codes/titles only (never the request or the whole body)."""
+    try:
+        errors = json.loads(exc.read() or b"{}").get("errors", [])
+    except (OSError, ValueError):
+        return []
+    return [f"{e.get('code', '')}: {e.get('title', '')}"[:160] for e in errors[:3]]
+
 
 class AppStoreConnect:
     BASE = "https://api.appstoreconnect.apple.com"
@@ -364,7 +376,7 @@ class AppStoreConnect:
         except Exception as exc:
             fail(f"could not sign an App Store Connect token ({type(exc).__name__}); check the .p8 secret")
 
-    def call(self, path, method="GET", body=None):
+    def call(self, path, method="GET", body=None, soft=False):
         url = path if path.startswith("https://") else self.BASE + path
         require(urllib.parse.urlsplit(url).netloc == "api.appstoreconnect.apple.com", "unexpected Apple host")
         data = json.dumps(body).encode() if body is not None else None
@@ -376,6 +388,8 @@ class AppStoreConnect:
                 raw = response.read()
                 return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as exc:
+            if soft:
+                return {"_status": exc.code, "_errors": _apple_error_codes(exc)}
             hint = {401: " (key id, issuer id or .p8 rejected)",
                     403: " (the API key needs the Admin role)"}.get(exc.code, "")
             fail(f"App Store Connect {method} {urllib.parse.urlsplit(url).path} -> HTTP {exc.code}{hint}")
@@ -410,7 +424,7 @@ def p12_certificate_der(env):
     from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat, pkcs12
 
     require(env.get("APPSTORE_DIST_P12_BASE64") and env.get("APPSTORE_DIST_P12_PASSWORD"),
-            "signing=p12 needs the APPSTORE_DIST_P12_BASE64 and APPSTORE_DIST_P12_PASSWORD secrets")
+            "signing=manual needs the APPSTORE_DIST_P12_BASE64 and APPSTORE_DIST_P12_PASSWORD secrets")
     try:
         key, cert, _ = pkcs12.load_key_and_certificates(
             base64.b64decode(env["APPSTORE_DIST_P12_BASE64"]), env["APPSTORE_DIST_P12_PASSWORD"].encode())
@@ -455,7 +469,7 @@ def asc(args):
         # for a team that has no registered iOS device.
         require(total > 0, "the team has no enabled iOS device; automatic signing cannot create the development "
                            "profile used for the archive. Register one device (any iPhone UDID) under "
-                           "Certificates, Identifiers & Profiles > Devices, or use signing=p12.")
+                           "Certificates, Identifiers & Profiles > Devices, or use signing=manual.")
         summary(f"- {total} enabled iOS device(s) registered.")
         certs = apple.all("/v1/certificates?filter[certificateType]=DEVELOPMENT,IOS_DEVELOPMENT&limit=200"
                           "&fields[certificates]=name,displayName,certificateType,expirationDate")["data"]
@@ -473,21 +487,158 @@ def asc(args):
             summary(f"- Revoked {len(stale)} stale CI development certificate(s) (\"Created via API\").")
         return
 
+    manual_signing(apple, env, bundle, bundles, read_only, now)
+
+
+# --- manual signing: App ID capabilities, App Store profile, distribution certificate ----
+
+PROFILE_NAME = "Khala App Store CI"
+# Entitlement the App target asks for -> App ID capability that puts it in the profile.
+# keychain-access-groups needs none (every profile carries <team>.*).
+CAPABILITY_FOR = {
+    "aps-environment": "PUSH_NOTIFICATIONS",
+    "com.apple.developer.healthkit": "HEALTHKIT",
+    "com.apple.developer.healthkit.background-delivery": "HEALTHKIT",
+    "com.apple.developer.networking.wifi-info": "ACCESS_WIFI_INFORMATION",
+    "com.apple.developer.nfc.readersession.formats": "NFC_TAG_READING",
+    "com.apple.developer.siri": "SIRIKIT",
+    "com.apple.developer.usernotifications.communication": "USERNOTIFICATIONS_COMMUNICATION",
+    "com.apple.developer.usernotifications.time-sensitive": "USERNOTIFICATIONS_TIMESENSITIVE",
+    "com.apple.security.application-groups": "APP_GROUPS",
+    "keychain-access-groups": None,
+}
+
+
+def requested_entitlements(prefix):
+    """The App target's entitlements as `apply` left them, with the app group resolved."""
+    with (ROOT / ENTITLEMENTS).open("rb") as source:
+        entitlements = plistlib.load(source)
+    unknown = sorted(set(entitlements) - set(CAPABILITY_FOR))
+    require(not unknown, f"App entitlements gained {unknown}: map them in khala_ship.py CAPABILITY_FOR")
+    groups = [g.replace("$(BUNDLE_ID_PREFIX)", prefix).replace("$(BUNDLE_ID_SUFFIX)", "")
+              for g in entitlements.get("com.apple.security.application-groups", [])]
+    return entitlements, groups
+
+
+def profile_entitlements(profile_b64):
+    match = re.search(rb"<\?xml.*?</plist>", base64.b64decode(profile_b64), re.S)
+    require(match is not None, "the App Store profile carries no readable plist")
+    return plistlib.loads(match.group(0))
+
+
+def profile_gaps(provision, entitlements, groups):
+    granted = provision.get("Entitlements", {})
+    missing = [key for key, capability in CAPABILITY_FOR.items()
+               if capability and key in entitlements and key not in granted]
+    missing_groups = [g for g in groups if g not in granted.get("com.apple.security.application-groups", [])]
+    return missing, missing_groups
+
+
+def manual_signing(apple, env, bundle, bundles, read_only, now):
+    prefix = env.get("BUNDLE_ID_PREFIX") or bundle.rsplit(".", 1)[0]
+    entitlements, groups = requested_entitlements(prefix)
     der = p12_certificate_der(env)
     certs = apple.all("/v1/certificates?limit=200&filter[certificateType]=DISTRIBUTION,IOS_DISTRIBUTION"
-                      "&fields[certificates]=certificateContent,expirationDate")["data"]
+                      "&fields[certificates]=certificateContent,expirationDate,certificateType")["data"]
     cert = next((c for c in certs if base64.b64decode(c["attributes"].get("certificateContent", "")) == der
                  and datetime.fromisoformat(c["attributes"]["expirationDate"].replace("Z", "+00:00")) > now), None)
-    require(cert is not None, "the P12 distribution certificate is not active in this Apple team")
-    profiles = apple.all("/v1/profiles?limit=200&filter[profileType]=IOS_APP_STORE&include=bundleId,certificates"
-                         "&fields[profiles]=name,profileState,expirationDate,bundleId,certificates"
+    require(cert is not None, "the P12 distribution certificate is not active in this Apple team "
+                              "(bootstrap it: dispatch with bootstrap_csr, see SHIP.md)")
+    summary(f"- Distribution certificate {cert['id']} ({cert['attributes']['certificateType']}) matches the P12.")
+
+    if not bundles:  # registered moments ago by asc()
+        query = urllib.parse.urlencode({"filter[identifier]": bundle, "fields[bundleIds]": "identifier"})
+        bundles = [b for b in apple.call(f"/v1/bundleIds?{query}")["data"] if b["attributes"]["identifier"] == bundle]
+    bundle_id = bundles[0]["id"]
+    have = {c["attributes"].get("capabilityType")
+            for c in apple.all(f"/v1/bundleIds/{bundle_id}/bundleIdCapabilities?limit=200")["data"]}
+    wanted = sorted({CAPABILITY_FOR[k] for k in entitlements if CAPABILITY_FOR.get(k)})
+    for capability in [c for c in wanted if c not in have]:
+        if read_only:
+            summary(f"- App ID capability {capability} is off (a build run enables it).")
+            continue
+        result = apple.call("/v1/bundleIdCapabilities", "POST", {"data": {
+            "type": "bundleIdCapabilities", "attributes": {"capabilityType": capability},
+            "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": bundle_id}}}}}, soft=True)
+        if "_status" in result:
+            summary(f"- Could not enable {capability} on the App ID (HTTP {result['_status']}: "
+                    f"{'; '.join(result['_errors'])}).")
+        else:
+            summary(f"- Enabled App ID capability {capability}.")
+
+    # Our own CI profile only (by name); a person's profiles are never touched.
+    profiles = apple.all("/v1/profiles?limit=200&filter[profileType]=IOS_APP_STORE"
+                         f"&filter[name]={urllib.parse.quote(PROFILE_NAME)}&include=bundleId,certificates"
+                         "&fields[profiles]=name,profileState,expirationDate,bundleId,certificates,profileContent,uuid"
                          "&fields[bundleIds]=identifier&fields[certificates]=name")
-    usable = usable_profiles(profiles, bundle, cert["id"], now)
-    require(usable, f"no ACTIVE App Store profile for {bundle} containing the P12 certificate; create one in "
-                    "Certificates, Identifiers & Profiles > Profiles (App Store Connect distribution)")
-    name = usable[0]["attributes"]["name"]
-    emit("profile_name", name)
-    summary(f"- P12 certificate active; App Store profile \"{name}\" selected.")
+    ours = [p for p in profiles["data"] if p["attributes"]["name"] == PROFILE_NAME]
+    profile = next(iter(usable_profiles({**profiles, "data": ours}, bundle, cert["id"], now)), None)
+    if profile is not None:
+        missing, missing_groups = profile_gaps(profile_entitlements(profile["attributes"]["profileContent"]),
+                                               entitlements, groups)
+        if missing or missing_groups:
+            summary(f"- Profile \"{PROFILE_NAME}\" lacks {missing + missing_groups}; recreating it.")
+            profile = None
+    if profile is None:
+        require(not read_only, f"no current \"{PROFILE_NAME}\" profile; a build run (not preflight_only) creates it")
+        for stale in ours:
+            apple.call(f"/v1/profiles/{stale['id']}", "DELETE")
+        profile = apple.call("/v1/profiles", "POST", {"data": {
+            "type": "profiles", "attributes": {"name": PROFILE_NAME, "profileType": "IOS_APP_STORE"},
+            "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": bundle_id}},
+                              "certificates": {"data": [{"type": "certificates", "id": cert["id"]}]}}}})["data"]
+        summary(f"- Created App Store profile \"{PROFILE_NAME}\" ({profile['attributes']['uuid']}).")
+    content = profile["attributes"]["profileContent"]
+    missing, missing_groups = profile_gaps(profile_entitlements(content), entitlements, groups)
+    require(not missing_groups,
+            f"the App Store profile has no app group {missing_groups}. The App Store Connect API cannot create or "
+            "assign app groups. Once, in Certificates, Identifiers & Profiles: Identifiers > + > App Groups > "
+            f"{', '.join(missing_groups)}; then Identifiers > {bundle} > App Groups > Configure > tick it > Save. "
+            "Then dispatch again (the profile is recreated automatically).")
+    require(not missing, f"the App Store profile lacks entitlements {missing}; enable the matching capability on "
+                         f"the App ID {bundle} in Certificates, Identifiers & Profiles, then dispatch again")
+    emit("profile_uuid", profile["attributes"]["uuid"])
+    emit("profile_b64", content)
+    summary(f"- App Store profile \"{PROFILE_NAME}\" ({profile['attributes']['uuid']}) covers every App "
+            f"entitlement, app group {', '.join(groups)} included.")
+
+
+def bootstrap_certificate(args):
+    """Create or find the Apple Distribution certificate for a CSR made on the VPS (public data only)."""
+    from cryptography import x509
+    from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+
+    csr_b64 = re.sub(r"-----[A-Z ]+-----|\s", "", os.environ.get("KHALA_CSR", ""))
+    try:
+        csr = x509.load_der_x509_csr(base64.b64decode(csr_b64, validate=True))
+    except Exception as exc:
+        fail(f"bootstrap_csr is not a base64 DER/PEM certificate signing request ({type(exc).__name__})")
+    require(csr.is_signature_valid, "the CSR signature is invalid")
+    spki = csr.public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo)
+    apple = AppStoreConnect(os.environ)
+    now = datetime.now(timezone.utc)
+    certs = apple.all("/v1/certificates?limit=200&filter[certificateType]=DISTRIBUTION,IOS_DISTRIBUTION"
+                      "&fields[certificates]=name,certificateContent,expirationDate,certificateType")["data"]
+    mine = None
+    for item in certs:
+        cert = x509.load_der_x509_certificate(base64.b64decode(item["attributes"]["certificateContent"]))
+        if cert.public_key().public_bytes(Encoding.DER, PublicFormat.SubjectPublicKeyInfo) == spki and \
+                datetime.fromisoformat(item["attributes"]["expirationDate"].replace("Z", "+00:00")) > now:
+            mine = item
+    if mine is not None:
+        summary(f"- Reusing distribution certificate {mine['id']} already issued for this key.")
+    else:
+        result = apple.call("/v1/certificates", "POST", {"data": {"type": "certificates", "attributes": {
+            "certificateType": "DISTRIBUTION", "csrContent": csr_b64}}}, soft=True)
+        require("_status" not in result,
+                f"Apple refused a new distribution certificate (HTTP {result.get('_status')}: "
+                f"{'; '.join(result.get('_errors', []))}); the team has {len(certs)} distribution certificate(s), "
+                "Apple allows only a few. Nothing was revoked; free a slot by hand if this is the limit.")
+        mine = result["data"]
+        summary(f"- Created Apple Distribution certificate {mine['id']}.")
+    attrs = mine["attributes"]
+    summary(f"- Expires {attrs['expirationDate']}. Public certificate (DER, base64) for the VPS p12 step:")
+    summary(f"KHALA_DIST_CERT_B64={attrs['certificateContent']}")
 
 
 # --- exported IPA check (Linux) -------------------------------------------------------
@@ -537,15 +688,16 @@ def main():
     command.add_argument("--bundle-id", default="")
     command.add_argument("--profile", default="")
     command = commands.add_parser("asc")
-    command.add_argument("--mode", choices=("cloud", "p12"), required=True)
+    command.add_argument("--mode", choices=("cloud", "manual"), required=True)
     command.add_argument("--bundle-id", required=True)
     command.add_argument("--read-only", action="store_true")
+    commands.add_parser("cert")
     command = commands.add_parser("verify-ipa")
     for flag in ("--ipa", "--team", "--bundle-id", "--version", "--build"):
         command.add_argument(flag, required=True)
     args = parser.parse_args()
     {"apply": apply, "verify": verify, "xcconfig": write_xcconfig, "export-options": export_options,
-     "asc": asc, "verify-ipa": verify_ipa}[args.command](args)
+     "asc": asc, "cert": bootstrap_certificate, "verify-ipa": verify_ipa}[args.command](args)
 
 
 if __name__ == "__main__":

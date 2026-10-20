@@ -27,14 +27,18 @@ on:
         type: boolean
         default: false
       signing:
-        description: 'cloud = Xcode automatic + cloud-managed signing via the API key. p12 = fallback, needs the APPSTORE_DIST_P12_* secrets and an App Store profile.'
+        description: 'manual = our Apple Distribution p12 (APPSTORE_DIST_P12_* secrets) + an App Store profile prepare creates. cloud = Xcode automatic/cloud signing via the API key (broken, see SHIP.md).'
         type: choice
-        options: [cloud, p12]
-        default: cloud
+        options: [manual, cloud]
+        default: manual
       xcode:
         description: 'Xcode on the xcode-27 image (/Applications/Xcode_<this>.app). App Store Connect rejects beta-built uploads.'
         type: string
         default: '27.1'
+      bootstrap_csr:
+        description: 'One-time certificate bootstrap ONLY (Ubuntu, no build): base64 of a CSR whose key stays on the VPS. Creates or finds its Apple Distribution certificate and prints the public certificate.'
+        type: string
+        default: ''
 
 concurrency:
   group: khala-testflight
@@ -51,14 +55,39 @@ env:
   SIGNING: ${{ inputs.signing }}
 
 jobs:
+  bootstrap:
+    name: Bootstrap the distribution certificate (Ubuntu)
+    if: ${{ inputs.bootstrap_csr != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout the release helper
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: Configuration/Khala
+      - name: Install App Store Connect client dependencies
+        run: python3 -m pip install --quiet 'pyjwt[crypto]==2.10.1'
+      - name: Create or find the Apple Distribution certificate for the CSR
+        # Public data only: the CSR in, the certificate out. The private key never leaves the VPS.
+        env:
+          KHALA_CSR: ${{ inputs.bootstrap_csr }}
+          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: python3 Configuration/Khala/khala_ship.py cert
+
   prepare:
     name: Validate Khala identity and App Store Connect (Ubuntu)
+    if: ${{ inputs.bootstrap_csr == '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     outputs:
       short_version: ${{ steps.version.outputs.short_version }}
       build_number: ${{ steps.version.outputs.build_number }}
-      profile_name: ${{ steps.asc.outputs.profile_name }}
+      profile_uuid: ${{ steps.asc.outputs.profile_uuid }}
+      # The App Store profile itself (public: certificate + entitlements, no key).
+      profile_b64: ${{ steps.asc.outputs.profile_b64 }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -95,11 +124,12 @@ jobs:
           APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
-          APPSTORE_DIST_P12_BASE64: ${{ inputs.signing == 'p12' && secrets.APPSTORE_DIST_P12_BASE64 || '' }}
-          APPSTORE_DIST_P12_PASSWORD: ${{ inputs.signing == 'p12' && secrets.APPSTORE_DIST_P12_PASSWORD || '' }}
+          APPSTORE_DIST_P12_BASE64: ${{ inputs.signing == 'manual' && secrets.APPSTORE_DIST_P12_BASE64 || '' }}
+          APPSTORE_DIST_P12_PASSWORD: ${{ inputs.signing == 'manual' && secrets.APPSTORE_DIST_P12_PASSWORD || '' }}
           READ_ONLY: ${{ inputs.preflight_only && '--read-only' || '' }}
-        # A build run (cloud) also revokes leftover key-less "Created via API" development
-        # certificates from earlier runs; preflight_only only reports them.
+        # manual: checks the p12 certificate, enables the App ID capabilities the entitlements
+        # need, and creates/refreshes our own "Khala App Store CI" profile (preflight_only reads only).
+        # cloud: also revokes leftover key-less "Created via API" development certificates.
         run: python3 Configuration/Khala/khala_ship.py asc --mode "$SIGNING" --bundle-id "$BUNDLE_ID" $READ_ONLY
 
   archive:
@@ -117,7 +147,7 @@ jobs:
       XCODE_DEVELOPER_DIR: /Applications/Xcode_${{ inputs.xcode }}.app/Contents/Developer
       SHORT_VERSION: ${{ needs.prepare.outputs.short_version }}
       BUILD_NUMBER: ${{ needs.prepare.outputs.build_number }}
-      PROFILE_NAME: ${{ needs.prepare.outputs.profile_name }}
+      PROFILE_UUID: ${{ needs.prepare.outputs.profile_uuid }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -143,27 +173,16 @@ jobs:
                 echo '::error::this Xcode is a beta; App Store Connect rejects uploads built with it'; exit 1
               fi ;;
           esac
-      - name: Import the distribution certificate (p12 fallback only)
-        if: inputs.signing == 'p12'
-        uses: Apple-Actions/import-codesign-certs@5142e029c445c10ffc7149d172e540235a065466
-        with:
-          p12-file-base64: ${{ secrets.APPSTORE_DIST_P12_BASE64 }}
-          p12-password: ${{ secrets.APPSTORE_DIST_P12_PASSWORD }}
-      - name: Download the App Store profile (p12 fallback only)
-        if: inputs.signing == 'p12'
-        uses: Apple-Actions/download-provisioning-profiles@2126b5f86a0e2863cbf4d2d312112b22b943a594
-        with:
-          bundle-id: ${{ env.BUNDLE_ID }}
-          profile-type: IOS_APP_STORE
-          issuer-id: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
-          api-key-id: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
-          api-private-key: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
       - name: Archive, export and verify the signature
         id: build
         env:
           APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_PRIVATE_KEY: ${{ inputs.signing == 'cloud' && secrets.APP_STORE_CONNECT_PRIVATE_KEY || '' }}
+          # manual: imported into a throwaway keychain that archive.sh deletes on exit.
+          APPSTORE_DIST_P12_BASE64: ${{ inputs.signing == 'manual' && secrets.APPSTORE_DIST_P12_BASE64 || '' }}
+          APPSTORE_DIST_P12_PASSWORD: ${{ inputs.signing == 'manual' && secrets.APPSTORE_DIST_P12_PASSWORD || '' }}
+          PROFILE_B64: ${{ needs.prepare.outputs.profile_b64 }}
         run: bash Configuration/Khala/archive.sh
       - name: Hand the signed IPA to the Ubuntu publisher
         id: ipa
