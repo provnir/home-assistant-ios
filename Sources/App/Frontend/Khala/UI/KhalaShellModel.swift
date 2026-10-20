@@ -8,16 +8,41 @@ import UIKit
 /// here.
 @MainActor
 final class KhalaShellModel: ObservableObject {
-    @Published var destination: KhalaDestination
-    @Published var isMenuOpen = false
+    @Published var destination: KhalaDestination {
+        didSet {
+            applyStatusBarStyle()
+            applyFrontendCorners()
+        }
+    }
+
+    @Published var isMenuOpen = false {
+        didSet {
+            applyStatusBarStyle()
+            applyFrontendCorners()
+        }
+    }
+
+    /// The web frontend is up (connected or loaded), so its header — with the menu button `KhalaShell`'s script
+    /// keeps there — is on screen. While it isn't (loading, offline), the shell's own edge swipe stands in.
+    @Published private(set) var isFrontendReady = false
+
+    /// The frontend asked for the app's menu (its header button, or the app's edge swipe bounced back as
+    /// `sidebar/show`). The view opens the drawer with its own animation.
+    let menuRequests = PassthroughSubject<Void, Never>()
 
     let server: Server
     private weak var webViewController: WebViewController?
     private var cancellables = Set<AnyCancellable>()
+    private var frontendMenuRequest: AnyCancellable?
 
     init(server: Server, startsOnDashboards: Bool) {
         self.server = server
         self.destination = startsOnDashboards ? .dashboards : .today
+        // `sidebar/show` from the frontend lands here because the app answers `hasSidebar` while the shell is
+        // on (`KhalaShell.isEnabled`); see `WebViewExternalMessageHandler`'s `.sidebarShow`.
+        frontendMenuRequest = NativeTabBarState.shared.moreRequests
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.menuRequests.send() }
     }
 
     /// Called by `FrontendView` while SwiftUI builds the web view, so nothing here may publish synchronously.
@@ -33,6 +58,44 @@ final class KhalaShellModel: ObservableObject {
                 self?.isMenuOpen = false
             }
             .store(in: &cancellables)
+        controller.overlayState?.$connectionState
+            .map { $0 == .connected || $0 == .loaded }
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.isFrontendReady = $0 }
+            .store(in: &cancellables)
+        applyStatusBarStyle()
+    }
+
+    /// The web view's controller decides the status-bar style for the whole window (SwiftUI defers to it). Over
+    /// Khala's own ground — a native screen, or the menu — the system default (ink in light mode) is the one
+    /// that reads; on the web UI the frontend's theme decides again.
+    private func applyStatusBarStyle() {
+        guard let webViewController else { return }
+        let style: UIStatusBarStyle? = destination == .dashboards && !isMenuOpen ? nil : .default
+        guard webViewController.statusBarStyleOverride != style else { return }
+        webViewController.statusBarStyleOverride = style
+        webViewController.setNeedsStatusBarAppearanceUpdate()
+    }
+
+    /// The web UI's card gets the drawer's rounded corners while the menu is open over it. Done on the web
+    /// view controller's own layer (a plain corner clip, settled with the drawer) rather than with a SwiftUI
+    /// mask, which would render the web view offscreen for as long as it is on screen.
+    private func applyFrontendCorners() {
+        guard let view = webViewController?.view else { return }
+        let radius = isMenuOpen && destination == .dashboards
+            ? CGFloat(KhalaDrawerMath.cardRadius)
+            : 0
+        guard view.layer.cornerRadius != radius else { return }
+        view.layer.cornerCurve = .continuous
+        if radius > 0 { view.layer.masksToBounds = true }
+        UIView.animate(
+            withDuration: KhalaDrawerMath.settleDuration,
+            animations: { view.layer.cornerRadius = radius },
+            completion: { _ in
+                if view.layer.cornerRadius == 0 { view.layer.masksToBounds = false }
+            }
+        )
     }
 
     /// Opens Home Assistant's more-info dialog for an entity in the web UI.

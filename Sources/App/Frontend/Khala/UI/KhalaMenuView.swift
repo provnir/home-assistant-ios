@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The main menu, revealed under the screen card (mockup `DayMenu`): who/where, a search field, the destinations,
 /// the DEVICES list built from Home Assistant data, and Settings at the bottom. Search filters destinations and
-/// devices by name; it never side-scrolls.
+/// devices by name; it never side-scrolls. Its ground is the shell's, drawn across the whole window.
 struct KhalaMenuView: View {
     let homeName: String
     let summary: String
@@ -138,7 +138,6 @@ struct KhalaMenuView: View {
         .padding(.top, 11)
         .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(KhalaGround(style: .menu))
         .onChange(of: searchFocusRequest) { _ in
             isSearchFocused = true
         }
@@ -184,4 +183,5 @@ struct KhalaMenuView: View {
         onSettings: {}
     )
     .frame(width: 312)
+    .background(KhalaGround(style: .menu))
 }

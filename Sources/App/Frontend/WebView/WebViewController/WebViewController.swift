@@ -184,8 +184,11 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
         Current.settingsStore.fullScreen
     }
 
+    /// Khala: set while a native screen covers the frontend, so the status bar reads on that screen.
+    var statusBarStyleOverride: UIStatusBarStyle?
+
     override var preferredStatusBarStyle: UIStatusBarStyle {
-        underlyingPreferredStatusBarStyle
+        statusBarStyleOverride ?? underlyingPreferredStatusBarStyle
     }
 
     /// SwiftUI defers status-bar appearance to this embedded controller (`preferredStatusBarStyle` above
@@ -349,6 +352,10 @@ final class WebViewController: UIViewController, WKNavigationDelegate, WKUIDeleg
             injectionTime: .atDocumentEnd,
             forMainFrameOnly: true
         ))
+
+        if KhalaShell.isEnabled {
+            userContentController.addUserScript(KhalaShell.frontendUserScript)
+        }
 
         userContentController.addUserScript(.init(
             source: """

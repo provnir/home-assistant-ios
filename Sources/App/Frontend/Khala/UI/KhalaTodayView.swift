@@ -2,12 +2,13 @@ import SFSafeSymbols
 import SwiftUI
 
 /// Today: the home's day as a vertical timeline (mockup `DayHome`). Past above "Now", upcoming below; the Now card
-/// holds live device chips. Floating glass buttons open the menu and its search; everything else is solid. The
-/// ground is drawn by the shell, clipped to the card's rounded shape while the menu is open.
+/// holds live device chips. A floating glass button opens the menu's search (the menu button itself is pinned by
+/// the shell); everything else is solid. The ground is drawn by the shell, masked to the card's shape.
 struct KhalaTodayView: View {
     let timeline: KhalaTimeline
     let now: Date
     let calendar: Calendar
+    /// Kept for call-site compatibility; the shell owns the menu button now.
     let onMenu: () -> Void
     let onSearch: () -> Void
     let onItem: (KhalaTimelineItem) -> Void
@@ -108,8 +109,8 @@ struct KhalaTodayView: View {
             }
             .scrollIndicators(.hidden)
 
+            // The menu button is the shell's, pinned top-leading over every screen; search stays Today's own.
             HStack {
-                KhalaGlassButton(symbol: .sidebarLeft, accessibilityLabel: KhalaText.openMenu, action: onMenu)
                 Spacer()
                 KhalaGlassButton(symbol: .magnifyingglass, accessibilityLabel: KhalaText.search, action: onSearch)
             }
