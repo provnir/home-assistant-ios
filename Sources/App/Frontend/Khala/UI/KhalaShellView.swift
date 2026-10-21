@@ -27,6 +27,9 @@ struct KhalaShellView: View {
     @State private var isDragging = false
     @State private var searchFocusRequest = 0
     @State private var showsDeviceSettings = false
+    @State private var showsAbout = false
+    /// An app settings screen shown in a sheet, where the container has no navigation stack to push it on.
+    @State private var appSettingsSheetItem: SettingsItem?
 
     init(server: Server, initialPath: String?, onWebViewController: @escaping (WebViewController) -> Void) {
         self.server = server
@@ -113,14 +116,47 @@ struct KhalaShellView: View {
             }
         }
         .onAppear {
+            KhalaShell.settingsListeners += 1
             home.start()
             if shell.destination != .dashboards {
                 // Today has no Home Assistant logo for the launch splash to morph into.
                 LaunchSplashOverlayState.shared.fadeOut()
             }
         }
-        .onDisappear { home.stop() }
+        .onDisappear {
+            KhalaShell.settingsListeners -= 1
+            home.stop()
+        }
         .onReceive(shell.menuRequests) { _ in settle(open: true) }
+        .sheet(isPresented: $showsAbout) {
+            NavigationStack {
+                AboutView()
+                    .khalaSettingsAppearance()
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            CloseButton { showsAbout = false }
+                        }
+                    }
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { appSettingsSheetItem != nil },
+            set: { if !$0 { appSettingsSheetItem = nil } }
+        )) {
+            if let item = appSettingsSheetItem {
+                NavigationStack {
+                    item.destinationView
+                        .injectingViewControllerProvider()
+                        .khalaSettingsAppearance()
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                CloseButton { appSettingsSheetItem = nil }
+                            }
+                        }
+                }
+            }
+        }
         .sheet(isPresented: $showsDeviceSettings) {
             KhalaDeviceSettingsView(
                 serverId: server.identifier.rawValue,
@@ -150,12 +186,7 @@ struct KhalaShellView: View {
                     shell.openDashboard(dashboard)
                 }
             },
-            serverSettings: shell.serverSettings,
-            onServerSettings: {
-                withAnimation(settleAnimation) {
-                    shell.openServerSettings()
-                }
-            },
+            isSettingsSelected: shell.isSettingsHighlighted,
             onSelect: { destination in
                 withAnimation(settleAnimation) {
                     shell.destination = destination
@@ -169,8 +200,9 @@ struct KhalaShellView: View {
             },
             onEditDevices: { showsDeviceSettings = true },
             onSettings: {
-                settle(open: false)
-                appSettings?.presentSettings()
+                withAnimation(settleAnimation) {
+                    shell.show(.settings)
+                }
             }
         )
     }
@@ -203,22 +235,36 @@ struct KhalaShellView: View {
 
             // Over the web UI: Khala's own header in place of the frontend's (hidden by `KhalaFrontendScript`),
             // once the frontend is up — the stand-by screen covers everything before that.
+            // Over a settings page (or History, Logbook, ...) whose own toolbar the script lifted: Khala's page
+            // chrome — large title, search, tabs, "+" (`KhalaPageHeaderView`).
             if showsDashboardHeader {
-                KhalaDashboardHeaderView(
-                    header: shell.dashboardHeader,
-                    icons: shell.dashboardIcons,
-                    onBack: { shell.goBackInFrontend() },
-                    onDashboard: { shell.openDashboard($0) },
-                    onView: { view, prefix in shell.openView(view, prefix: prefix) },
-                    onAction: { shell.perform($0) }
-                )
-                .transition(.opacity)
+                if let page = shell.pageHeader {
+                    KhalaPageHeaderView(
+                        header: page,
+                        pageId: shell.frontendState?.path ?? shell.frontendPath ?? "",
+                        onBack: { withAnimation(settleAnimation) { shell.goBackFromPage() } },
+                        onAction: { shell.perform($0) },
+                        onSearch: { shell.searchPage($0) },
+                        onTab: { shell.openPageTab($0) }
+                    )
+                    .transition(.opacity)
+                } else {
+                    KhalaDashboardHeaderView(
+                        header: shell.dashboardHeader,
+                        icons: shell.dashboardIcons,
+                        onBack: { shell.goBackInFrontend() },
+                        onDashboard: { shell.openDashboard($0) },
+                        onView: { view, prefix in shell.openView(view, prefix: prefix) },
+                        onAction: { shell.perform($0) }
+                    )
+                    .transition(.opacity)
+                }
             }
 
             // Pinned top-leading in the safe area, above the content and never part of its flow: the one leading
             // control on every screen. Over the web UI the dashboards header swaps it for Back while the frontend
             // is on a sub-page or dialog (the drawer stays one edge swipe away).
-            if shell.destination != .dashboards || (showsDashboardHeader && !shell.dashboardHeader.showsBack) {
+            if shell.destination != .dashboards || (showsDashboardHeader && !showsBackInHeader) {
                 KhalaGlassButton(symbol: .sidebarLeft, accessibilityLabel: KhalaText.openMenu) {
                     settle(open: true)
                 }
@@ -251,6 +297,12 @@ struct KhalaShellView: View {
 
     private var showsDashboardHeader: Bool {
         shell.destination == .dashboards && shell.isFrontendReady
+    }
+
+    /// The web UI's header shows Back in the leading slot (so the shell's menu button stays off).
+    private var showsBackInHeader: Bool {
+        if let page = shell.pageHeader { return page.back != .none }
+        return shell.dashboardHeader.showsBack
     }
 
     /// Where the shell pins the menu button inside the safe area. Native screens leave room for it above their
@@ -293,12 +345,52 @@ struct KhalaShellView: View {
             )
         case .dashboards:
             EmptyView()
+        case .settings:
+            KhalaSettingsView(
+                serverName: server.info.name,
+                settings: shell.settings,
+                live: home.live,
+                onServerPage: { path in
+                    withAnimation(settleAnimation) {
+                        shell.openServerPage(path)
+                    }
+                },
+                onAppItem: { openAppSettings($0) },
+                onAbout: { showsAbout = true },
+                onMoreAppSettings: { openAllAppSettings() }
+            )
         case .camera, .device, .entity:
             KhalaDetailScreen(destination: shell.destination, server: server, home: home, live: home.live, shell: shell)
         }
     }
 
     // MARK: - Actions
+
+    /// The container's navigation stack (`ContainerView.frontend`), which the app's settings screens push onto;
+    /// absent with the App Labs tab bar on iOS 26.
+    private var hasPushStack: Bool {
+        if #available(iOS 26, *), NativeTabBarState.shared.isEnabled { return false }
+        return appSettings != nil
+    }
+
+    /// One of the companion app's settings screens, pushed as it is over the shell (Back returns to Settings),
+    /// in Khala's appearance (`KhalaSettingsAppearance`, applied by the container's destination).
+    private func openAppSettings(_ item: SettingsItem) {
+        if hasPushStack, let appSettings {
+            appSettings.pushPath.append(AppSettingsPushRoute.item(item))
+        } else {
+            appSettingsSheetItem = item
+        }
+    }
+
+    /// The app's complete settings list (Location, Sensors, Widgets, Siri, Watch, ...), pushed the same way.
+    private func openAllAppSettings() {
+        if hasPushStack, let appSettings {
+            appSettings.pushPath.append(AppSettingsPushRoute.settings)
+        } else {
+            appSettings?.presentSettings()
+        }
+    }
 
     private func handle(_ item: KhalaTimelineItem) {
         switch item.kind {

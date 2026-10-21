@@ -40,11 +40,17 @@ final class KhalaShellModel: ObservableObject {
     private(set) var dashboardIcons: [String: FrontendIcon] = [:]
     /// The frontend page on screen (the app's URL observation).
     @Published private(set) var frontendPath: String? {
-        didSet { rememberDashboard() }
+        didSet {
+            rememberDashboard()
+            frontendPageChanged()
+        }
     }
-    /// What `KhalaFrontendScript` last reported: views, dialog, actions.
+    /// What `KhalaFrontendScript` last reported: views, dialog, actions, a lifted page's chrome.
     @Published private(set) var frontendState: KhalaFrontendState? {
-        didSet { rememberDashboard() }
+        didSet {
+            rememberDashboard()
+            frontendPageChanged()
+        }
     }
     /// The frontend's more-info dialog is up (external bus `more_info/opened`).
     @Published private(set) var isMoreInfoOpen = false
@@ -59,6 +65,18 @@ final class KhalaShellModel: ObservableObject {
     /// admin-only panel out for them).
     @Published private(set) var serverSettings: KhalaDashboard?
     private var panelsToken: HACancellable?
+
+    // MARK: Settings (`KhalaShellModel+Settings`)
+
+    /// The Settings screen's server facts (capabilities, repairs, host); kept across visits.
+    let settings: KhalaSettingsModel
+    /// The Home Assistant page the Settings screen opened last, where it landed after the frontend's own
+    /// redirect; Back there returns to Settings. Nil once the web UI is used for something else.
+    @Published var settingsEntryPath: String?
+    /// The path Settings asked for, and until when a redirect below it still counts as its landing.
+    var settingsRequestedPath: String?
+    var settingsLandingDeadline: Date?
+    private var settingsRequest: AnyCancellable?
 
     /// The frontend asked for the app's menu (the app's edge swipe on the web UI, bounced back as `sidebar/show`).
     /// The view opens the drawer with its own animation.
@@ -76,11 +94,15 @@ final class KhalaShellModel: ObservableObject {
     init(server: Server, startsOnDashboards: Bool) {
         self.server = server
         self.destination = startsOnDashboards ? .dashboards : .today
+        self.settings = KhalaSettingsModel(server: server)
         // `sidebar/show` from the frontend lands here because the app answers `hasSidebar` while the shell is
         // on (`KhalaShell.isEnabled`); see `WebViewExternalMessageHandler`'s `.sidebarShow`.
         frontendMenuRequest = NativeTabBarState.shared.moreRequests
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in self?.menuRequests.send() }
+        // The frontend's own "Companion app" settings entry (see `ContainerView`'s `onShowSettings`).
+        settingsRequest = KhalaShell.settingsRequests
+            .sink { [weak self] in self?.show(.settings) }
     }
 
     /// Called by `FrontendView` while SwiftUI builds the web view, so nothing here may publish synchronously.

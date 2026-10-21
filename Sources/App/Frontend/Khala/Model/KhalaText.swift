@@ -10,8 +10,6 @@ enum KhalaText {
     static let automations = "Automations"
     static let dashboards = "Dashboards"
     static let settings = "Settings"
-    static let settingsSection = "SETTINGS"
-    static let appSettings = "App settings"
     static let serverSettings = "Home Assistant settings"
     static let devices = "DEVICES"
     static let dashboardsSection = "DASHBOARDS"

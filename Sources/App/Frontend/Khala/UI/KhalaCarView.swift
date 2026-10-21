@@ -80,7 +80,7 @@ struct KhalaCarView: View {
                 }
                 .padding(.horizontal, 16)
                 .frame(height: 44)
-                .khalaGlass(in: Capsule())
+                .khalaGlass(in: Capsule(), interactive: true)
             }
             .buttonStyle(.plain)
         }

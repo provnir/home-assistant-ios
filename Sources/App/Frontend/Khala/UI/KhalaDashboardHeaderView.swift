@@ -136,7 +136,7 @@ struct KhalaDashboardHeaderView: View {
             .padding(.leading, 16)
             .padding(.trailing, 14)
             .frame(height: 44)
-            .khalaGlass(in: Capsule())
+            .khalaGlass(in: Capsule(), interactive: true)
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -172,7 +172,7 @@ struct KhalaDashboardHeaderView: View {
                 .font(.system(size: 19, weight: .medium))
                 .foregroundStyle(KhalaTheme.ink)
                 .frame(width: 44, height: 44)
-                .khalaGlass(in: Circle())
+                .khalaGlass(in: Circle(), interactive: true)
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)

@@ -32,6 +32,8 @@ struct ContainerView: View {
             coordinator.settingsPresenter = appSettings
             appSettings.appCoordinator = coordinator
             coordinator.onShowSettings = { [weak coordinator] pushOntoNavigationStack in
+                // Khala: the frontend's "Companion app" settings open Khala's own Settings screen.
+                if KhalaShell.isEnabled, KhalaShell.requestSettings() { return }
                 // Push only in compact width, read from the window at presentation time.
                 let sizeClass = coordinator?.window?.traitCollection.horizontalSizeClass
                 if pushOntoNavigationStack, sizeClass == .compact, !NativeTabBarState.shared.isEnabled {
@@ -108,9 +110,11 @@ struct ContainerView: View {
                         case .settings:
                             SettingsView(embedInOwnNavigation: false)
                                 .injectingViewControllerProvider()
+                                .khalaSettingsAppearance()
                         case let .item(item):
                             item.destinationView
                                 .injectingViewControllerProvider()
+                                .khalaSettingsAppearance()
                         }
                     }
             }

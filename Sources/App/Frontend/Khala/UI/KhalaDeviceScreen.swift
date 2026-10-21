@@ -28,7 +28,14 @@ struct KhalaDeviceScreen<Title: View, Trailing: View, Content: View>: View {
                             .lineLimit(2)
                             .padding(.top, 1)
                     }
+                    // Sections cross-fade (and settle a few points) as the bar's lens moves; the bar animates
+                    // the change (`KhalaSubTabBar.motion`).
                     content()
+                        .id(selection)
+                        .transition(.asymmetric(
+                            insertion: .opacity.combined(with: .offset(y: 10)),
+                            removal: .opacity
+                        ))
                         .padding(.top, 20)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

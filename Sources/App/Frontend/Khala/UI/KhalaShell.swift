@@ -1,3 +1,4 @@
+import Combine
 import Shared
 import WebKit
 
@@ -20,6 +21,20 @@ enum KhalaShell {
     /// web UI Khala draws its own header (`KhalaDashboardHeaderView`, pinned menu button included) and the
     /// frontend's dashboard toolbar is hidden by `KhalaFrontendScript`, which this user script installs. See
     /// that type for what it relies on in the frontend and how it fails soft.
+    /// Requests for the app's settings from outside the shell (the frontend's "Companion app" entry, external
+    /// bus `config_screen/show`), which Khala answers with its own Settings screen.
+    @MainActor static let settingsRequests = PassthroughSubject<Void, Never>()
+    /// Shells listening for `settingsRequests` (one per connected server's shell on screen).
+    @MainActor static var settingsListeners = 0
+
+    /// Asks the shell on screen for its Settings screen; false when no shell listens (the caller then shows
+    /// the app's settings its own way).
+    @MainActor static func requestSettings() -> Bool {
+        guard settingsListeners > 0 else { return false }
+        settingsRequests.send()
+        return true
+    }
+
     @MainActor static var frontendUserScript: WKUserScript {
         WKUserScript(
             source: KhalaFrontendScript.source(),

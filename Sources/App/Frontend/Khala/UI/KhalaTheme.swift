@@ -28,6 +28,14 @@ enum KhalaTheme {
     static let warmGlow = Color(red: 242 / 255, green: 176 / 255, blue: 97 / 255)
     static let coolGlow = Color(red: 74 / 255, green: 111 / 255, blue: 165 / 255)
     static let shadow = Color(red: 20 / 255, green: 20 / 255, blue: 30 / 255)
+    /// Text of the amber attention chip (updates, repairs).
+    static let attentionInk = dynamic(light: 0x8A4A10, dark: 0xF0B47A)
+    /// Hairlines between rows of a settings card.
+    static let rowDivider = dynamic(light: 0xE6E3DC, dark: 0x2E3035)
+    /// A settings row's trailing chevron.
+    static let chevron = dynamic(light: 0xB4B4BC, dark: 0x5E6067)
+    /// The glyph chip of an app settings row.
+    static let appChip = dynamic(light: 0xEFEDEA, dark: 0x2A2B30)
 
     static func accent(_ category: KhalaCategory) -> Color {
         switch category {
@@ -97,6 +105,7 @@ enum KhalaTheme {
         case .device, .entity: return .powerplug
         case .automations: return .wandAndStars
         case .dashboards: return .squareGrid2x2
+        case .settings: return .gearshape
         }
     }
 

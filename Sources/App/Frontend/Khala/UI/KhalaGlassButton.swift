@@ -28,7 +28,8 @@ struct KhalaGlassButton: View {
                 }
                 .contentShape(Circle())
         }
-        .buttonStyle(.plain)
+        // iOS 26's interactive glass answers the touch itself; the press style adds the same dip before it.
+        .buttonStyle(KhalaPressStyle())
         .accessibilityLabel(accessibilityLabel)
     }
 }

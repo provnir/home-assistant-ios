@@ -23,9 +23,8 @@ struct KhalaMenuView: View {
     /// The dashboard on screen while the web UI is (its row is the highlighted one, not "Dashboards").
     var highlightedDashboardId: String?
     var onDashboard: (KhalaDashboard) -> Void = { _ in }
-    /// Home Assistant's own settings (`/config`), opened in the web UI; nil for non-admins.
-    var serverSettings: KhalaDashboard?
-    var onServerSettings: () -> Void = {}
+    /// The Settings row is lit (the Settings screen, or one of Home Assistant's settings pages, is on screen).
+    var isSettingsSelected = false
     let onSelect: (KhalaDestination) -> Void
     let onDevice: (KhalaDevice) -> Void
     let onEditDevices: () -> Void
@@ -160,26 +159,15 @@ struct KhalaMenuView: View {
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.immediately)
 
-            // SETTINGS: the server's (devices & services, automations, add-ons ... in the web UI) and the app's own
-            // (servers, gestures, kiosk mode, notifications), told apart by name.
-            sectionTitle(KhalaText.settingsSection)
-                .padding(.leading, 12)
-                .padding(.top, 6)
-            if let serverSettings {
-                KhalaMenuRow(
-                    title: serverSettings.title,
-                    symbol: .gearshape,
-                    symbolColor: KhalaTheme.ink,
-                    isSelected: serverSettings.id == highlightedDashboardId,
-                    action: onServerSettings
-                )
-            }
+            // Settings: the app's and the server's, in one screen (`KhalaSettingsView`).
             KhalaMenuRow(
-                title: KhalaText.appSettings,
-                symbol: .sliderHorizontal3,
+                title: KhalaText.settings,
+                symbol: .gearshape,
                 symbolColor: KhalaTheme.ink,
+                isSelected: isSettingsSelected,
                 action: onSettings
             )
+            .padding(.top, 6)
         }
         .padding(.horizontal, 14)
         .padding(.top, 11)
@@ -215,7 +203,7 @@ struct KhalaMenuView: View {
         switch destination {
         case .cameras: return cameraCount > 0 ? "\(cameraCount)" : nil
         case .automations: return automationCount > 0 ? "\(automationCount)" : nil
-        case .today, .dashboards, .camera, .device, .entity: return nil
+        case .today, .dashboards, .settings, .camera, .device, .entity: return nil
         }
     }
 }

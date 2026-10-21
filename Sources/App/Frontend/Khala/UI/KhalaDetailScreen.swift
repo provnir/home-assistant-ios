@@ -55,7 +55,7 @@ struct KhalaDetailScreen: View {
         case let .entity(entityId):
             generic(live.entitiesById[entityId]?.name ?? entityId, category: .neutral, primary: entityId,
                     members: [entityId], actions: actions)
-        case .today, .cameras, .automations, .dashboards:
+        case .today, .cameras, .automations, .dashboards, .settings:
             EmptyView()
         }
     }
