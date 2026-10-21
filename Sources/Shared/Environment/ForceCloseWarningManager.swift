@@ -31,8 +31,6 @@ public final class ForceCloseWarningManager {
 
     public static var isEnabled: Bool {
         guard !Current.isCatalyst else { return false }
-        // Khala: no location updates exist to be stopped by a force close (`KhalaPrivacy`).
-        guard KhalaPrivacy.reportsLocation else { return false }
         guard Current.settingsStore.forceCloseWarningEnabled else { return false }
         return readBackgroundLocationEnabled()
     }

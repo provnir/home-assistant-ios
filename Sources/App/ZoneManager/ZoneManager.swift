@@ -60,9 +60,7 @@ class ZoneManager {
     private func updateLocationManager(isInitial: Bool) {
         with(locationManager) {
             $0.delegate = collector
-            // Khala: no background location (`KhalaPrivacy`); `locationSources` then reads all-off, so this stops
-            // significant-change monitoring and `sync` removes every monitored region an earlier build left.
-            $0.allowsBackgroundLocationUpdates = KhalaPrivacy.reportsLocation
+            $0.allowsBackgroundLocationUpdates = true
             $0.pausesLocationUpdatesAutomatically = false
 
             if Current.settingsStore.locationSources.significantLocationChange {

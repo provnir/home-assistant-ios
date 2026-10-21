@@ -94,10 +94,7 @@ public class ConnectivitySensor: SensorProvider {
         let sensors: Promise<[WebhookSensor]> = firstly { () -> Guarantee<[Result<[WebhookSensor]>]> in
             var sensors = [Promise<[WebhookSensor]>]()
 
-            if KhalaPrivacy.reportsNetworkIdentity {
-                // Khala: the Wi-Fi network locates the phone; SSID and BSSID are not reported (`KhalaPrivacy`).
-                sensors.append(ssid())
-            }
+            sensors.append(ssid())
             sensors.append(connectionType())
             #if !targetEnvironment(macCatalyst)
             sensors.append(cellularProviders())

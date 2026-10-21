@@ -20,9 +20,7 @@ import Shared
 @MainActor
 final class FlightSpeedProbe: NSObject, CLLocationManagerDelegate {
     static func firstFixWithSpeed(timeout: TimeInterval) async -> CLLocation? {
-        // Khala: no fix is ever taken (`KhalaPrivacy`).
-        guard KhalaPrivacy.reportsLocation else { return nil }
-        return await FlightSpeedProbe().run(timeout: timeout)
+        await FlightSpeedProbe().run(timeout: timeout)
     }
 
     private let locationManager = CLLocationManager()

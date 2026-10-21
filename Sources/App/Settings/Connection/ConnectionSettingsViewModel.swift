@@ -303,7 +303,6 @@ final class ConnectionSettingsViewModel: ObservableObject {
     }
 
     func updateLocationPrivacy(_ privacy: ServerLocationPrivacy) {
-        let privacy = KhalaPrivacy.reportsLocation ? privacy : .never
         server.info.setSetting(value: privacy, for: .locationPrivacy)
         locationPrivacy = privacy
         HomeAssistantAPI.manuallyUpdate(

@@ -41,7 +41,7 @@ final class ServerSwitchingSettingsViewModel: NSObject, ObservableObject {
     /// One-shot fix so the screen can show which server is closest right now.
     /// A rough fix is enough for a human-readable distance, and it arrives faster.
     private func requestCurrentLocationIfAuthorized() {
-        guard KhalaPrivacy.reportsLocation, Current.servers.all.count > 1,
+        guard Current.servers.all.count > 1,
               [.authorizedAlways, .authorizedWhenInUse].contains(locationManager.authorizationStatus) else {
             return
         }

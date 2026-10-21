@@ -451,10 +451,7 @@ public class AppEnvironment {
         $0.register(provider: BatterySensor.self)
         $0.register(provider: StorageSensor.self)
         $0.register(provider: ConnectivitySensor.self)
-        if KhalaPrivacy.reportsLocation {
-            // Khala: the geocoded address is the phone's location (`KhalaPrivacy`).
-            $0.register(provider: GeocoderSensor.self)
-        }
+        $0.register(provider: GeocoderSensor.self)
         $0.register(provider: InputOutputDeviceSensor.self)
         $0.register(provider: DisplaySensor.self)
         $0.register(provider: ActiveSensor.self)

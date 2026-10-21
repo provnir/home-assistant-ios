@@ -109,8 +109,6 @@ public class SettingsStore {
     }
 
     public func isLocationEnabled(for state: UIApplication.State) -> Bool {
-        // Khala: the phone's location is never read or reported (`KhalaPrivacy`).
-        guard KhalaPrivacy.reportsLocation else { return false }
         let authorizationStatus: CLAuthorizationStatus
 
         let locationManager = CLLocationManager()
@@ -577,8 +575,6 @@ public class SettingsStore {
     public var locationSources: LocationSource {
         get {
             func boolValue(for keyPath: KeyPath<LocationSource, Bool>) -> Bool {
-                // Khala: every location source is off, whatever was stored (`KhalaPrivacy`).
-                guard KhalaPrivacy.reportsLocation else { return false }
                 let key = LocationSource.key(for: keyPath)
                 if prefs.object(forKey: key) == nil {
                     // default to enabled for location source settings

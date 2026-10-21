@@ -223,28 +223,25 @@ struct ConnectionSettingsView: View {
     private var privacySection: some View {
         Section(header: Text(L10n.SettingsDetails.Privacy.title)) {
             if #available(iOS 26.0, *) {
-                // Khala: the location choice is not offered; the server never receives one (`KhalaPrivacy`).
-                if KhalaPrivacy.reportsLocation {
-                    NavigationLink {
-                        PrivacyPickerView(
-                            title: L10n.Settings.ConnectionSection.LocationSendType.title,
-                            options: ServerLocationPrivacy.allCases,
-                            selection: Binding(
-                                get: { viewModel.locationPrivacy },
-                                set: { viewModel.updateLocationPrivacy($0) }
-                            ),
-                            isDisabled: viewModel.versionRequiresLocationGPSOptional,
-                            footerMessage: viewModel.versionRequiresLocationGPSOptional
-                                ? Version.updateLocationGPSOptional.coreRequiredString
-                                : nil
-                        )
-                    } label: {
-                        NavigationRow(
-                            title: L10n.Settings.ConnectionSection.LocationSendType.title,
-                            value: viewModel.locationPrivacy.localizedDescription,
-                            valueColor: .secondary
-                        )
-                    }
+                NavigationLink {
+                    PrivacyPickerView(
+                        title: L10n.Settings.ConnectionSection.LocationSendType.title,
+                        options: ServerLocationPrivacy.allCases,
+                        selection: Binding(
+                            get: { viewModel.locationPrivacy },
+                            set: { viewModel.updateLocationPrivacy($0) }
+                        ),
+                        isDisabled: viewModel.versionRequiresLocationGPSOptional,
+                        footerMessage: viewModel.versionRequiresLocationGPSOptional
+                            ? Version.updateLocationGPSOptional.coreRequiredString
+                            : nil
+                    )
+                } label: {
+                    NavigationRow(
+                        title: L10n.Settings.ConnectionSection.LocationSendType.title,
+                        value: viewModel.locationPrivacy.localizedDescription,
+                        valueColor: .secondary
+                    )
                 }
 
                 NavigationLink {
@@ -266,19 +263,17 @@ struct ConnectionSettingsView: View {
                     )
                 }
             } else {
-                if KhalaPrivacy.reportsLocation {
-                    Button {
-                        showLocationPrivacySheet = true
-                    } label: {
-                        NavigationRow(
-                            title: L10n.Settings.ConnectionSection.LocationSendType.title,
-                            value: viewModel.locationPrivacy.localizedDescription,
-                            valueColor: .secondary
-                        )
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
+                Button {
+                    showLocationPrivacySheet = true
+                } label: {
+                    NavigationRow(
+                        title: L10n.Settings.ConnectionSection.LocationSendType.title,
+                        value: viewModel.locationPrivacy.localizedDescription,
+                        valueColor: .secondary
+                    )
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
 
                 Button {
                     showSensorPrivacySheet = true

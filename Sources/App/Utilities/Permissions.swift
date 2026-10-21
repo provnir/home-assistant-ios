@@ -317,7 +317,7 @@ private class PermissionsLocationDelegate: NSObject, CLLocationManagerDelegate {
             return
         }
 
-        if KhalaPrivacy.reportsLocation, manager.authorizationStatus == .authorizedWhenInUse {
+        if manager.authorizationStatus == .authorizedWhenInUse {
             locationManager.requestAlwaysAuthorization()
         }
 
@@ -336,11 +336,6 @@ private class PermissionsLocationDelegate: NSObject, CLLocationManagerDelegate {
         self.completionHandler = completionHandler
 
         let status = locationManager.authorizationStatus
-        // Khala: never asks iOS for location (`KhalaPrivacy`); the caller hears the current status.
-        guard KhalaPrivacy.reportsLocation else {
-            completionHandler(status.genericStatus)
-            return
-        }
 
         switch status {
         case .notDetermined:

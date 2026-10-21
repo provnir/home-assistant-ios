@@ -166,8 +166,6 @@ final class LocationSettingsViewModel: NSObject, ObservableObject {
     // MARK: - Permission actions
 
     func handleLocationPermissionTap() {
-        // Khala: never asks iOS for location (`KhalaPrivacy`); the screen itself is not offered.
-        guard KhalaPrivacy.reportsLocation else { return }
         if locationManager.authorizationStatus == .notDetermined {
             locationManager.requestAlwaysAuthorization()
         } else {
@@ -191,8 +189,7 @@ final class LocationSettingsViewModel: NSObject, ObservableObject {
     /// One-shot location request so zone cards can show how far away each zone is.
     /// A rough fix is enough for a human-readable distance, and it arrives faster.
     private func requestCurrentLocationIfAuthorized() {
-        guard KhalaPrivacy.reportsLocation,
-              [.authorizedAlways, .authorizedWhenInUse].contains(locationManager.authorizationStatus) else {
+        guard [.authorizedAlways, .authorizedWhenInUse].contains(locationManager.authorizationStatus) else {
             return
         }
         locationManager.desiredAccuracy = kCLLocationAccuracyHundredMeters
