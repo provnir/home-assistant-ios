@@ -27,7 +27,7 @@ struct KhalaCameraView: View {
     @State private var snapshot: KhalaSnapshot? = nil
     @State private var snapshotFailed = false
     /// The player the live card settled on (WebRTC first when the camera offers it, `CameraStreamPlan`).
-    @State private var livePlayer: CameraPlayerType?
+    @State private var livePlayer: KhalaLivePath?
 
     private static let tabs = [
         KhalaSubTab(title: KhalaScreenText.live, symbol: .videoFill),

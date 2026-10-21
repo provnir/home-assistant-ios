@@ -227,10 +227,13 @@ struct CameraPlayerView: View {
     private func player(_ playerType: CameraPlayerType) -> some View {
         switch playerType {
         case .webRTC:
-            WebRTCVideoPlayerView(
+            // Khala: Apple's WebRTC in a WKWebView (negotiates H.265) instead of the bundled libwebrtc.
+            KhalaWebKitLivePlayer(
                 server: server,
                 cameraEntityId: cameraEntityId,
                 cameraName: name ?? cameraName,
+                fit: .contain,
+                swipeDownDismisses: true,
                 controlsVisible: $controlsVisible,
                 showLoader: $showLoader,
                 onWebRTCUnsupported: {
