@@ -140,7 +140,7 @@ struct KhalaCarView: View {
                 case .didntWake:
                     Image(systemSymbol: .exclamationmarkTriangleFill)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(KhalaTheme.accent(.water))
+                        .foregroundStyle(KhalaTheme.accent(.heat))
                 case .idle:
                     Image(systemSymbol: car.isAwake == false ? .moonFill : .arrowClockwise)
                         .font(.system(size: 13, weight: .semibold))
