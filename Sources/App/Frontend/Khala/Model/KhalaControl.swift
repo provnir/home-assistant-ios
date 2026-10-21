@@ -24,6 +24,9 @@ struct KhalaControl: Equatable, Identifiable {
     let needsConfirmation: Bool
 
     var id: String { entityId }
+
+    /// What a tile whose state isn't known yet reads.
+    static let unknownStateText = "…"
 }
 
 extension KhalaControl {
@@ -36,14 +39,17 @@ extension KhalaControl {
         switch entity.domain {
         case "lock":
             let locked = entity.state == "locked"
+            // Unknown while a sleeping car wakes (build 24.1 showed "—"): a quiet "…", no action, the tile's
+            // disabled look, until the refresh lands and it reads Locked/Unlocked.
+            let unknown = ["unknown", "unavailable", ""].contains(entity.state)
             return KhalaControl(
                 entityId: entity.entityId,
                 title: title,
-                stateText: KhalaText.humanized(state: entity.state),
-                glyph: locked ? .lock : .unlock,
+                stateText: unknown ? KhalaControl.unknownStateText : KhalaText.humanized(state: entity.state),
+                glyph: locked || unknown ? .lock : .unlock,
                 isActive: locked,
-                call: unavailable ? nil : KhalaServiceCallPlan(domain: "lock", service: locked ? "unlock" : "lock",
-                                                               entityId: entity.entityId),
+                call: unknown ? nil : KhalaServiceCallPlan(domain: "lock", service: locked ? "unlock" : "lock",
+                                                           entityId: entity.entityId),
                 options: [],
                 needsConfirmation: locked
             )

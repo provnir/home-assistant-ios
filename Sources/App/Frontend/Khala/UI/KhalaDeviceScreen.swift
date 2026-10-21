@@ -37,9 +37,16 @@ struct KhalaDeviceScreen<Title: View, Trailing: View, Content: View>: View {
                     // Sections cross-fade and slide in from the side of the tab chosen, with the bar's lens
                     // (`KhalaSubTabBar.motion`); the old and the new section overlap while they do, so the new one
                     // doesn't start below the old.
+                    // The section is ONE view, a VStack: a section is several sibling views (hero card, grid,
+                    // "Recent", ...), and put straight into the ZStack each sibling became its own ZStack layer —
+                    // every screen's views piled up at the top-left (build 24.1: the car's grid over its hero, the
+                    // camera's timeline over the live card). Only the section as a whole is stacked and animated.
                     ZStack(alignment: .topLeading) {
-                        content()
-                            .id(selection)
+                        VStack(alignment: .leading, spacing: 0) {
+                            content()
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .id(selection)
                             .transition(.asymmetric(
                                 insertion: .opacity.combined(with: .offset(x: selection >= lastSelection ? 28 : -28)),
                                 removal: .opacity

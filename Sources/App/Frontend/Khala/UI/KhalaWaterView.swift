@@ -128,23 +128,38 @@ struct KhalaWaterView: View {
         let tonight = related.filter { !$0.fireDates.isEmpty }
         if !tonight.isEmpty {
             KhalaSectionHeader(title: KhalaScreenText.tonight)
-            let rows: [(KhalaDeviceAutomation, Date)] = tonight.compactMap { automation in
-                automation.fireDates.first.map { (automation, $0) }
-            }
-                .sorted { $0.1 < $1.1 }
+            // Newest on top (`KhalaTimelineOrder`): the latest run first, the next one just above Now.
+            let order = KhalaTimelineOrder(
+                upcoming: tonight,
+                past: [],
+                date: { $0.fireDates.first ?? .distantFuture },
+                showsNow: true
+            )
             VStack(spacing: 0) {
-                ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
-                    KhalaTimelineRow(
-                        time: KhalaText.time(row.1, calendar: calendar),
-                        isNow: false,
-                        dot: .upcoming(row.0.isEnabled ? .heat : .neutral),
-                        dotCenter: 22,
-                        lineAbove: index == 0 ? nil : KhalaTheme.line,
-                        lineBelow: index == rows.count - 1 ? nil : KhalaTheme.line
-                    ) {
-                        KhalaAutomationCard(automation: row.0, category: .heat) {
-                            Task { await actions.perform(row.0.toggleCall) }
+                ForEach(order.rows) { row in
+                    if let automation = row.item {
+                        KhalaTimelineRow(
+                            time: automation.fireDates.first.map { KhalaText.time($0, calendar: calendar) } ?? "",
+                            isNow: false,
+                            dot: .upcoming(automation.isEnabled ? .heat : .neutral),
+                            dotCenter: 22,
+                            lineAbove: KhalaTheme.stroke(row.strokeAbove),
+                            lineBelow: KhalaTheme.stroke(row.strokeBelow)
+                        ) {
+                            KhalaAutomationCard(automation: automation, category: .heat) {
+                                Task { await actions.perform(automation.toggleCall) }
+                            }
                         }
+                    } else {
+                        KhalaPlainTimelineRow(
+                            time: KhalaText.now,
+                            text: heat.stateText,
+                            detail: nil,
+                            dot: .now,
+                            lineAbove: KhalaTheme.stroke(row.strokeAbove),
+                            lineBelow: KhalaTheme.stroke(row.strokeBelow),
+                            isNow: true
+                        )
                     }
                 }
             }
@@ -185,8 +200,9 @@ struct KhalaWaterView: View {
                 .foregroundStyle(KhalaTheme.secondary)
                 .khalaCard()
         } else {
+            // Newest on top: the latest next run first, the soonest last; those with no next run at the bottom.
             VStack(spacing: 10) {
-                ForEach(all) { automation in
+                ForEach(KhalaTimelineLine.latestFirst(all, date: { $0.fireDates.first })) { automation in
                     KhalaAutomationCard(automation: automation, category: .heat, detail: nextText(automation)) {
                         Task { await actions.perform(automation.toggleCall) }
                     }

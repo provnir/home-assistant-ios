@@ -23,6 +23,8 @@ enum KhalaText {
     static let sunrise = "Sunrise"
     static let sunset = "Sunset"
     static let allClear = "all clear"
+    /// The hint of a timeline screen's title: a tap scrolls back to Now.
+    static let backToNow = "Scrolls back to now"
     static let automation = "Automation"
     static let editDevices = "Edit"
     static let noDevices = "No devices yet"

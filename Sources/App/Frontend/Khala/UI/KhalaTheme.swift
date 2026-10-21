@@ -37,6 +37,15 @@ enum KhalaTheme {
     /// The glyph chip of an app settings row.
     static let appChip = dynamic(light: 0xEFEDEA, dark: 0x2A2B30)
 
+    /// A timeline line stretch's colour: ink through the past, the light line through what's coming, none past an end.
+    static func stroke(_ stroke: KhalaTimelineStroke) -> Color? {
+        switch stroke {
+        case .none: return nil
+        case .upcoming: return line
+        case .past: return ink
+        }
+    }
+
     static func accent(_ category: KhalaCategory) -> Color {
         switch category {
         case .security: return dynamic(light: 0x4A6FA5, dark: 0x86A5D6)

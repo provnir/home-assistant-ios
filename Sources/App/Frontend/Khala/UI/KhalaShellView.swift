@@ -199,6 +199,7 @@ struct KhalaShellView: View {
             },
             isSettingsSelected: shell.isSettingsHighlighted,
             onSelect: { destination in
+                if destination == shell.destination { shell.nowScrollRequest += 1 }
                 withAnimation(settleAnimation) {
                     shell.destination = destination
                     shell.isMenuOpen = false
@@ -334,7 +335,8 @@ struct KhalaShellView: View {
                     searchFocusRequest += 1
                 },
                 onItem: { handle($0) },
-                onDevice: { device in shell.route(KhalaRouting.target(for: device, cameras: home.cameras)) }
+                onDevice: { device in shell.route(KhalaRouting.target(for: device, cameras: home.cameras)) },
+                scrollRequest: shell.nowScrollRequest
             )
         case .cameras:
             KhalaCamerasView(

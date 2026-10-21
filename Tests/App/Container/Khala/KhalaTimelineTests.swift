@@ -20,19 +20,35 @@ struct KhalaTimelineTests {
         )
     }
 
-    @Test func itemsRunFromThePastThroughNowIntoTheEvening() {
+    @Test func itemsRunNewestOnTopFromTheEveningThroughNowIntoThePast() {
         let timeline = build(configs: ["automation.midnight_check": Fixtures.midnightCheckConfig])
         let rows = timeline.items.map { "\(KhalaText.time($0.date, calendar: Fixtures.calendar)) \($0.title)" }
         #expect(rows == [
-            "06:48 Sunrise",
-            "10:35 Person at Porch",
-            "12:00 Now",
-            "18:02 Sunset",
-            "19:30 Rover Time to full charge",
             "00:00 Midnight check",
+            "19:30 Rover Time to full charge",
+            "18:02 Sunset",
+            "12:00 Now",
+            "10:35 Person at Porch",
+            "06:48 Sunrise",
         ])
-        #expect(timeline.items.prefix(2).allSatisfy { $0.isPast })
-        #expect(timeline.items.suffix(3).allSatisfy { !$0.isPast && !$0.isNow })
+        #expect(timeline.items.prefix(3).allSatisfy { !$0.isPast && !$0.isNow })
+        #expect(timeline.items.suffix(2).allSatisfy { $0.isPast })
+        #expect(timeline.nowIndex == 3)
+        #expect(timeline.idsAboveNow == timeline.items.prefix(3).map(\.id))
+        #expect(timeline.phases == [.upcoming, .upcoming, .upcoming, .now, .past, .past])
+    }
+
+    @Test func todaysLineIsLightAboveNowAndInkBelowIt() {
+        let strokes = build(configs: ["automation.midnight_check": Fixtures.midnightCheckConfig]).strokes
+        typealias S = KhalaTimelineLine.Strokes
+        #expect(strokes == [
+            S(above: .none, below: .upcoming),
+            S(above: .upcoming, below: .upcoming),
+            S(above: .upcoming, below: .upcoming),
+            S(above: .upcoming, below: .past),
+            S(above: .past, below: .past),
+            S(above: .past, below: .none),
+        ])
     }
 
     @Test func detectionNamesThePlaceAndLinksTheCamera() throws {

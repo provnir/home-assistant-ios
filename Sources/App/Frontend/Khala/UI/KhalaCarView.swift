@@ -80,10 +80,10 @@ struct KhalaCarView: View {
         KhalaEntityRefresh.lastUpdated(of: live.members(of: device))
     }
 
-    /// "Car didn't wake" after a failed wake, else "Updated 4 min ago".
+    /// "Waking car…" / "Updating…" while a refresh runs, "Car didn't wake" after a failed wake, else
+    /// "Updated 4 min ago" (`KhalaCarSyncState.freshnessText`).
     private func freshness(now: Date) -> String? {
-        if sync == .didntWake { return KhalaScreenText.carDidntWake }
-        return lastUpdated.map { KhalaScreenText.updated($0, now: now) }
+        sync.freshnessText(lastUpdated: lastUpdated, now: now)
     }
 
     /// Wakes the car when it sleeps (Nir: a refresh must wake it to read its status), then
@@ -204,16 +204,20 @@ struct KhalaCarView: View {
 
         if !presence.isEmpty {
             KhalaSectionHeader(title: KhalaScreenText.recent)
+            // Newest on top (`KhalaTimelineOrder`); all of it happened, so filled dots on the ink line.
+            let recent = KhalaTimelineOrder(upcoming: [], past: presence, date: \.date, showsNow: false)
             VStack(spacing: 0) {
-                ForEach(Array(presence.enumerated()), id: \.element.id) { index, change in
-                    KhalaPlainTimelineRow(
-                        time: KhalaText.time(change.date, calendar: calendar),
-                        text: presenceText(change),
-                        detail: dayDetail(change.date),
-                        dot: index == 0 ? .past(.car) : .upcoming(.car),
-                        lineAbove: index == 0 ? nil : KhalaTheme.line,
-                        lineBelow: index == presence.count - 1 ? nil : KhalaTheme.line
-                    )
+                ForEach(recent.rows) { row in
+                    if let change = row.item {
+                        KhalaPlainTimelineRow(
+                            time: KhalaText.time(change.date, calendar: calendar),
+                            text: presenceText(change),
+                            detail: dayDetail(change.date),
+                            dot: .past(.car),
+                            lineAbove: KhalaTheme.stroke(row.strokeAbove),
+                            lineBelow: KhalaTheme.stroke(row.strokeBelow)
+                        )
+                    }
                 }
             }
         }
