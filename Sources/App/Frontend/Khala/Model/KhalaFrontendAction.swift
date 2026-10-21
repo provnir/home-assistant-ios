@@ -10,12 +10,24 @@ struct KhalaFrontendAction: Hashable, Identifiable {
     let title: String
     let key: String?
     let children: [KhalaFrontendAction]
+    /// A checkbox item's state (the integrations page's "Show ignored"); nil for a plain action.
+    let isChecked: Bool?
+    let isDisabled: Bool
 
-    init(id: String, title: String, key: String? = nil, children: [KhalaFrontendAction] = []) {
+    init(
+        id: String,
+        title: String,
+        key: String? = nil,
+        children: [KhalaFrontendAction] = [],
+        isChecked: Bool? = nil,
+        isDisabled: Bool = false
+    ) {
         self.id = id
         self.title = title
         self.key = key
         self.children = children
+        self.isChecked = isChecked
+        self.isDisabled = isDisabled
     }
 
     init?(json: Any?) {
@@ -27,7 +39,9 @@ struct KhalaFrontendAction: Hashable, Identifiable {
             id: id,
             title: title,
             key: KhalaValue.string(json["key"]),
-            children: (json["children"] as? [Any] ?? []).compactMap(KhalaFrontendAction.init(json:))
+            children: (json["children"] as? [Any] ?? []).compactMap(KhalaFrontendAction.init(json:)),
+            isChecked: KhalaValue.bool(json["checked"]),
+            isDisabled: KhalaValue.bool(json["disabled"]) ?? false
         )
     }
 

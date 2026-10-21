@@ -41,6 +41,45 @@ enum KhalaText {
     static let label = "Label"
     static let role = "Role"
     static let done = "Done"
+    static let homeAssistantSection = "HOME ASSISTANT"
+    static let thisAppSection = "THIS APP"
+    static let thisApp = "This app"
+    static let searchSettings = "Search app and server settings"
+    static let searchAllSettings = "Search all settings"
+    static let aboutKhala = "About Khala"
+    static let moreAppSettings = "More app settings"
+    static let serverSettingsUnavailable = "Home Assistant's settings need an administrator account."
+    static let more = "More"
+
+    /// "1 update", "3 updates".
+    static func updates(_ count: Int) -> String {
+        count == 1 ? "1 update" : "\(count) updates"
+    }
+
+    /// "1 repair", "2 repairs".
+    static func repairs(_ count: Int) -> String {
+        count == 1 ? "1 repair" : "\(count) repairs"
+    }
+
+    /// The server card's second line: "Home Assistant 2026.10.2 · homeassistant.local".
+    static func serverSubtitle(version: String?, host: String?) -> String {
+        let product = version.map { "Home Assistant \($0)" } ?? "Home Assistant"
+        guard let host, !host.isEmpty else { return product }
+        return "\(product) · \(host)"
+    }
+
+    /// The Settings screen's footer: "Khala 2026.10.2 (17.1)".
+    static func appVersion(_ version: String?, build: String?) -> String {
+        switch (version, build) {
+        case let (version?, build?): return "Khala \(version) (\(build))"
+        case let (version?, nil): return "Khala \(version)"
+        default: return "Khala"
+        }
+    }
+
+    static func noResults(_ query: String) -> String {
+        "Nothing in settings matches \u{201C}\(query)\u{201D}"
+    }
 
     /// An untitled view's name when the frontend gave none.
     static func view(number: Int) -> String {
