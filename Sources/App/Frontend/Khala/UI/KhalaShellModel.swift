@@ -26,6 +26,9 @@ final class KhalaShellModel: ObservableObject {
     /// Routing (`KhalaShellModel+Routing`): the media sheet on display.
     @Published var sheet: KhalaSheetRequest?
 
+    /// Bumped when the destination on display is chosen again in the drawer: a timeline screen scrolls back to Now.
+    @Published var nowScrollRequest = 0
+
     /// The web frontend is up (connected or loaded), so the native dashboards header is drawn over it. While it
     /// isn't (loading, offline) the stand-by screen covers it and the shell's own edge swipe stands in.
     @Published private(set) var isFrontendReady = false {

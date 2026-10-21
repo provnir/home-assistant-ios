@@ -1,7 +1,7 @@
 import Foundation
 
-/// The Today screen's content: the home's day as one ordered list — what already happened above "Now", what is
-/// coming below — plus the Now card's headline and chips. Pure function of entity states, so it can be built and
+/// The Today screen's content: the home's day as one ordered list, NEWEST ON TOP (Nir, build 24.1) — what is coming
+/// above "Now", furthest first; what already happened below it, most recent first — plus the Now card's headline and chips. Pure function of entity states, so it can be built and
 /// tested anywhere Foundation runs.
 ///
 /// Sources, all read from live states (nothing home-specific is named in code):
@@ -12,6 +12,7 @@ import Foundation
 /// - enabled automations' next time/sun triggers (`KhalaAutomationSchedule`), when their configs were fetched;
 /// - `sensor`s with device class `timestamp` of a listed device, pointing later today.
 struct KhalaTimeline: Equatable {
+    /// Top to bottom: furthest upcoming … nearest, Now, latest past … earliest (`KhalaTimelineOrder`).
     var items: [KhalaTimelineItem]
     /// The Now card's line: "21° and sunny · sunset in 5 h 32 m".
     var headline: String
@@ -108,9 +109,10 @@ struct KhalaTimeline: Equatable {
             targetEntityId: nil
         )
 
+        // Time increases upward; at the same minute what's next sits above Now, what happened below it.
         let items = (sunItems + shownDetections + upcoming + [nowItem]).sorted { lhs, rhs in
-            if lhs.date != rhs.date { return lhs.date < rhs.date }
-            return order(lhs) < order(rhs)
+            if lhs.date != rhs.date { return lhs.date > rhs.date }
+            return order(lhs) > order(rhs)
         }
 
         return KhalaTimeline(
@@ -120,6 +122,20 @@ struct KhalaTimeline: Equatable {
             chips: KhalaDeviceCatalog.nowChips(from: devices)
         )
     }
+
+    /// Each row's place relative to Now.
+    var phases: [KhalaTimelinePhase] {
+        items.map { $0.isNow ? .now : $0.isPast ? .past : .upcoming }
+    }
+
+    /// The line above and below each row's dot.
+    var strokes: [KhalaTimelineLine.Strokes] { KhalaTimelineLine.strokes(phases) }
+
+    /// Where Now sits (the screen opens on it); nil only for `empty`.
+    var nowIndex: Int? { items.firstIndex(where: \.isNow) }
+
+    /// The ids of the rows above Now: when they change, Now moves on screen.
+    var idsAboveNow: [String] { items.prefix(nowIndex ?? 0).map(\.id) }
 
     // MARK: - Pieces
 
@@ -205,7 +221,7 @@ struct KhalaTimeline: Equatable {
         return line.prefix(1).uppercased() + line.dropFirst()
     }
 
-    /// Tie-break for items at the same minute: what happened, then now, then what's next.
+    /// Tie-break for items at the same minute, in time order: what happened, then now, then what's next.
     private static func order(_ item: KhalaTimelineItem) -> Int {
         if item.isPast { return 0 }
         return item.isNow ? 1 : 2

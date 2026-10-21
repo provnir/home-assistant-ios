@@ -123,42 +123,16 @@ struct KhalaCameraView: View {
     private func liveTab(_ camera: KhalaEntity, today: [KhalaDetection]) -> some View {
         let mute = KhalaCameraCatalog.notificationSwitch(for: camera, in: live.entities)
         VStack(spacing: 8) {
-            ZStack(alignment: .topLeading) {
-                KhalaCameraLivePlayer(
-                    server: server,
-                    cameraEntityId: camera.entityId,
-                    cameraName: camera.name,
-                    poster: { await actions.thumbnail(cameraEntityId: camera.entityId) },
-                    onPlayer: { livePlayer = $0 }
-                )
-                .id(camera.entityId)
-                badge {
-                    HStack(spacing: 6) {
-                        Circle().fill(Color(red: 0.847, green: 0.278, blue: 0.231)).frame(width: 6, height: 6)
-                        // "LIVE · WEBRTC": which player is on, so a laggy stream can be told from a fallback.
-                        Text(([KhalaScreenText.live] + (livePlayer.map { [Self.playerName($0)] } ?? []))
-                            .joined(separator: " · ").uppercased())
-                            .font(.system(size: 11, weight: .bold))
-                            .kerning(0.8)
-                    }
+            // The 16:9 box takes the space; the player and its badges are laid INTO it (overlay) and clipped to
+            // it, so a UIKit player view can never size the card or draw or take touches outside it.
+            Color.clear
+                .frame(maxWidth: .infinity)
+                .aspectRatio(16 / 9, contentMode: .fit)
+                .overlay {
+                    liveCard(camera)
                 }
-                .padding(10)
-                .allowsHitTesting(false)
-                Button {
-                    onFullScreen(camera.entityId, camera.name)
-                } label: {
-                    badge {
-                        Image(systemSymbol: .arrowUpLeftAndArrowDownRight)
-                            .font(.system(size: 11, weight: .bold))
-                    }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(KhalaScreenText.fullScreen)
-                .frame(maxWidth: .infinity, alignment: .topTrailing)
-                .padding(10)
-            }
-            .aspectRatio(16 / 9, contentMode: .fit)
-            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
 
             HStack(spacing: 8) {
                 actionButton(KhalaScreenText.snapshot, symbol: .cameraFill) {
@@ -185,6 +159,46 @@ struct KhalaCameraView: View {
 
         KhalaSectionHeader(title: KhalaScreenText.todayOn(camera.name))
         todayTimeline(camera, today: today)
+    }
+
+    /// The player with its "LIVE · WEBRTC" badge and the full-screen button, filling the live card's 16:9 box.
+    private func liveCard(_ camera: KhalaEntity) -> some View {
+        ZStack(alignment: .topLeading) {
+            KhalaCameraLivePlayer(
+                server: server,
+                cameraEntityId: camera.entityId,
+                cameraName: camera.name,
+                poster: { await actions.thumbnail(cameraEntityId: camera.entityId) },
+                onPlayer: { livePlayer = $0 }
+            )
+            .id(camera.entityId)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            badge {
+                HStack(spacing: 6) {
+                    Circle().fill(Color(red: 0.847, green: 0.278, blue: 0.231)).frame(width: 6, height: 6)
+                    // "LIVE · WEBRTC": which player is on, so a laggy stream can be told from a fallback.
+                    Text(([KhalaScreenText.live] + (livePlayer.map { [Self.playerName($0)] } ?? []))
+                        .joined(separator: " · ").uppercased())
+                        .font(.system(size: 11, weight: .bold))
+                        .kerning(0.8)
+                }
+            }
+            .padding(10)
+            .allowsHitTesting(false)
+            Button {
+                onFullScreen(camera.entityId, camera.name)
+            } label: {
+                badge {
+                    Image(systemSymbol: .arrowUpLeftAndArrowDownRight)
+                        .font(.system(size: 11, weight: .bold))
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(KhalaScreenText.fullScreen)
+            .frame(maxWidth: .infinity, alignment: .topTrailing)
+            .padding(10)
+        }
     }
 
     private static func playerName(_ player: CameraPlayerType) -> String {
@@ -217,10 +231,10 @@ struct KhalaCameraView: View {
         .buttonStyle(.plain)
     }
 
-    /// Today's detections above Now, then the camera's own clock-driven automations below it.
+    /// Newest on top (`KhalaTimelineOrder`): the camera's own clock-driven automations above Now (furthest first),
+    /// "Now · Watching", then today's detections below it, latest first.
     @ViewBuilder
     private func todayTimeline(_ camera: KhalaEntity, today: [KhalaDetection]) -> some View {
-        let past = Array(today.prefix(KhalaTimeline.maximumDetections).reversed())
         let memberIds = Set(live.entities.filter { $0.deviceId != nil && $0.deviceId == camera.deviceId }.map(\.entityId))
             .union([camera.entityId])
         let upcoming = KhalaDeviceAutomations.related(
@@ -229,44 +243,53 @@ struct KhalaCameraView: View {
                 .timeIntervalSince(now),
             calendar: calendar
         ).filter { !$0.fireDates.isEmpty }
+        let order = KhalaCameraTimelineRow.order(
+            upcoming: upcoming,
+            past: Array(today.prefix(KhalaTimeline.maximumDetections))
+        )
         VStack(spacing: 0) {
-            ForEach(Array(past.enumerated()), id: \.element.id) { index, detection in
-                KhalaTimelineRow(
-                    time: KhalaText.time(detection.date, calendar: calendar),
-                    isNow: false,
-                    dot: .past(.security),
-                    dotCenter: KhalaEventCard.height / 2,
-                    lineAbove: index == 0 ? nil : KhalaTheme.ink,
-                    lineBelow: KhalaTheme.ink
-                ) {
-                    KhalaEventCard(
-                        title: detection.noun,
-                        subtitle: detection.source,
-                        category: .security,
-                        capture: KhalaCaptureRef(cameraEntityId: camera.entityId, date: detection.date)
+            ForEach(order.rows) { row in
+                let above = KhalaTheme.stroke(row.strokeAbove)
+                let below = KhalaTheme.stroke(row.strokeBelow)
+                switch row.item {
+                case nil:
+                    KhalaPlainTimelineRow(
+                        time: KhalaText.now,
+                        text: KhalaScreenText.watching,
+                        detail: today.isEmpty ? KhalaText.allClear : KhalaText.detections(today.count),
+                        dot: .now,
+                        lineAbove: above,
+                        lineBelow: below,
+                        isNow: true
+                    )
+                case let .automation(automation)?:
+                    KhalaPlainTimelineRow(
+                        time: automation.fireDates.first.map { KhalaText.time($0, calendar: calendar) } ?? "",
+                        text: automation.name,
+                        detail: nil,
+                        dot: .upcoming(.security),
+                        lineAbove: above,
+                        lineBelow: below
+                    )
+                case let .detection(detection)?:
+                    KhalaTimelineRow(
+                        time: KhalaText.time(detection.date, calendar: calendar),
+                        isNow: false,
+                        dot: .past(.security),
+                        dotCenter: KhalaEventCard.height / 2,
+                        lineAbove: above,
+                        lineBelow: below
                     ) {
-                        onCapture(camera, detection.date)
+                        KhalaEventCard(
+                            title: detection.noun,
+                            subtitle: detection.source,
+                            category: .security,
+                            capture: KhalaCaptureRef(cameraEntityId: camera.entityId, date: detection.date)
+                        ) {
+                            onCapture(camera, detection.date)
+                        }
                     }
                 }
-            }
-            KhalaPlainTimelineRow(
-                time: KhalaText.now,
-                text: KhalaScreenText.watching,
-                detail: today.isEmpty ? KhalaText.allClear : KhalaText.detections(today.count),
-                dot: .now,
-                lineAbove: past.isEmpty ? nil : KhalaTheme.ink,
-                lineBelow: upcoming.isEmpty ? nil : KhalaTheme.line,
-                isNow: true
-            )
-            ForEach(Array(upcoming.enumerated()), id: \.element.id) { index, automation in
-                KhalaPlainTimelineRow(
-                    time: automation.fireDates.first.map { KhalaText.time($0, calendar: calendar) } ?? "",
-                    text: automation.name,
-                    detail: nil,
-                    dot: .upcoming(.security),
-                    lineAbove: KhalaTheme.line,
-                    lineBelow: index == upcoming.count - 1 ? nil : KhalaTheme.line
-                )
             }
         }
     }

@@ -228,4 +228,16 @@ enum KhalaCarSyncState: Equatable {
     case updating
     /// The car didn't come online in time; "Retry" runs it again.
     case didntWake
+
+    /// The subtitle's freshness part. While a refresh runs it says so ("Waking car…", "Updating…"), whatever the
+    /// entities' `last_updated` says — pressing the wake button alone moves that — and only once it has finished
+    /// "Updated just now" (build 24.1: the pill said "Waking car…" while the subtitle already said "Updated just now").
+    func freshnessText(lastUpdated: Date?, now: Date) -> String? {
+        switch self {
+        case .waking: return KhalaScreenText.wakingCar
+        case .updating: return KhalaScreenText.updating
+        case .didntWake: return KhalaScreenText.carDidntWake
+        case .idle: return lastUpdated.map { KhalaScreenText.updated($0, now: now) }
+        }
+    }
 }

@@ -1,8 +1,8 @@
 import SFSafeSymbols
 import SwiftUI
 
-/// Today: the home's day as a vertical timeline (mockup `DayHome`). Past above "Now", upcoming below; the Now card
-/// holds live device chips. A floating glass button opens the menu's search (the menu button itself is pinned by
+/// Today: the home's day as a vertical timeline (mockup `DayHome`), newest on top (Nir, build 24.1): upcoming above
+/// "Now", the past below it, and the screen opens on Now (`KhalaNowScrollView`). The Now card holds live device chips. A floating glass button opens the menu's search (the menu button itself is pinned by
 /// the shell); everything else is solid. The ground is drawn by the shell, masked to the card's shape.
 struct KhalaTodayView: View {
     let timeline: KhalaTimeline
@@ -13,6 +13,14 @@ struct KhalaTodayView: View {
     let onSearch: () -> Void
     let onItem: (KhalaTimelineItem) -> Void
     let onDevice: (KhalaDevice) -> Void
+    /// Bumped by the shell when Today is chosen again in the drawer: back to Now.
+    var scrollRequest = 0
+
+    /// Bumped by a tap on the title: back to Now.
+    @State private var titleTaps = 0
+
+    /// Where Now's top settles: just under the floating menu/search buttons.
+    private static let nowInset: CGFloat = 9 + 44 + 4
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -28,13 +36,19 @@ struct KhalaTodayView: View {
 
     var body: some View {
         ZStack(alignment: .top) {
-            ScrollView {
+            KhalaNowScrollView(idsAboveNow: timeline.idsAboveNow, request: scrollRequest + titleTaps) {
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(KhalaText.today)
-                        .font(KhalaTheme.largeTitle)
-                        .kerning(0.3)
-                        .foregroundStyle(KhalaTheme.ink)
-                        .accessibilityAddTraits(.isHeader)
+                    Button {
+                        titleTaps += 1
+                    } label: {
+                        Text(KhalaText.today)
+                            .font(KhalaTheme.largeTitle)
+                            .kerning(0.3)
+                            .foregroundStyle(KhalaTheme.ink)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(.isHeader)
+                    .accessibilityHint(KhalaText.backToNow)
                     Text(verbatim: "\(Self.dateFormatter.string(from: now)) · \(timeline.summary)")
                         .font(KhalaTheme.headerSubtitle)
                         .foregroundStyle(KhalaTheme.secondary)
@@ -42,13 +56,11 @@ struct KhalaTodayView: View {
                         .padding(.bottom, 26)
 
                     let items = timeline.items
+                    let strokes = timeline.strokes
                     ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                        let isFirst = index == 0
-                        let isLast = index == items.count - 1
-                        // Ink through the past up to Now, the light line after it and past the last row.
-                        let throughPast = item.isPast || item.isNow
-                        let lineAbove: Color? = isFirst ? nil : (throughPast ? KhalaTheme.ink : KhalaTheme.line)
-                        let lineBelow: Color? = item.isPast && !isLast ? KhalaTheme.ink : KhalaTheme.line
+                        // The light line through what's coming, ink from Now down through the past.
+                        let lineAbove = KhalaTheme.stroke(strokes[index].above)
+                        let lineBelow = KhalaTheme.stroke(strokes[index].below)
                         let time = item.isNow ? KhalaText.now : KhalaText.time(item.date, calendar: calendar)
                         switch item.kind {
                         case .sunrise, .sunset:
@@ -66,6 +78,7 @@ struct KhalaTodayView: View {
                                     .frame(height: 22)
                             }
                         case .now:
+                            KhalaNowMarker(inset: Self.nowInset)
                             KhalaTimelineRow(
                                 time: time,
                                 isNow: true,
@@ -114,8 +127,8 @@ struct KhalaTodayView: View {
                     }
                 }
                 .padding(.horizontal, KhalaTheme.gutter)
-                // Room for the floating buttons above the title, and for the line to run on below the last row.
-                .padding(.top, 9 + 44 + 4)
+                // Room for the floating buttons above the title, and below the earliest row.
+                .padding(.top, Self.nowInset)
                 .padding(.bottom, 48)
             }
             .scrollIndicators(.hidden)

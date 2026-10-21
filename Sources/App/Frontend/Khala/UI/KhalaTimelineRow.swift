@@ -2,7 +2,8 @@ import SwiftUI
 
 /// One timeline row: a 44 pt time column, the dot on the vertical line, then the row's content. Each row draws
 /// its own stretch of the line (above and below its dot) so the line stays continuous whatever the rows' heights:
-/// ink while it runs through the past, the light line colour after Now.
+/// ink while it runs through the past (below Now: timelines are newest on top), the light line above Now
+/// (`KhalaTimelineLine`).
 struct KhalaTimelineRow<Content: View>: View {
     let time: String
     let isNow: Bool
