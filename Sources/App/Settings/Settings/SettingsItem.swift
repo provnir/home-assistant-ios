@@ -212,6 +212,9 @@ enum SettingsItem: String, Hashable, CaseIterable {
         #endif
 
         switch self {
+        case .location:
+            // Khala: location is never read or reported, so its settings are not offered (`KhalaPrivacy`).
+            return KhalaPrivacy.reportsLocation
         case .liveActivities:
             return Self.canShowLiveActivities
         case .macToolbar:

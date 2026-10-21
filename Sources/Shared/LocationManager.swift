@@ -283,6 +283,11 @@ final class LocationManager: NSObject, LocationManagerProtocol {
      - Note: Permission changes are automatically broadcast via NotificationCenter
      */
     func requestLocationPermission() {
+        // Khala: never asks (`KhalaPrivacy`); listeners still hear the current state.
+        guard KhalaPrivacy.reportsLocation else {
+            postPermissionChangeNotification()
+            return
+        }
         switch coreLocationManager.authorizationStatus {
         case .notDetermined:
             coreLocationManager.requestWhenInUseAuthorization()
@@ -299,6 +304,10 @@ final class LocationManager: NSObject, LocationManagerProtocol {
         purposeKey: String,
         completion: @escaping (Error?) -> Void
     ) {
+        guard KhalaPrivacy.reportsLocation else {
+            completion(CLError(.denied))
+            return
+        }
         DispatchQueue.main.async { [coreLocationManager] in
             coreLocationManager
                 .requestTemporaryFullAccuracyAuthorization(withPurposeKey: purposeKey, completion: completion)
@@ -326,7 +335,7 @@ extension LocationManager: CLLocationManagerDelegate {
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         postPermissionChangeNotification()
 
-        if manager.authorizationStatus == .authorizedWhenInUse {
+        if KhalaPrivacy.reportsLocation, manager.authorizationStatus == .authorizedWhenInUse {
             // If we just got when-in-use authorization, we can now request always authorization
             manager.requestAlwaysAuthorization()
         }

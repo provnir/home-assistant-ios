@@ -99,7 +99,7 @@ final class OnboardingPermissionsNavigationViewModel: NSObject, ObservableObject
 
         if let customSteps = steps {
             // Use externally provided steps
-            self.steps = customSteps
+            self.steps = Self.khalaSteps(customSteps, server: onboardingServer)
         } else {
             // Use default logic to determine steps
             let connection = onboardingServer.info.connection
@@ -139,10 +139,17 @@ final class OnboardingPermissionsNavigationViewModel: NSObject, ObservableObject
                 defaultSteps = defaultSteps.map { $0 == .location ? .privacy : $0 }
             }
 
-            self.steps = defaultSteps
+            self.steps = Self.khalaSteps(defaultSteps, server: onboardingServer)
         }
 
         super.init()
+    }
+
+    /// Khala: the location permission screen never shows and the server receives no location (`KhalaPrivacy`).
+    private static func khalaSteps(_ steps: [StepID], server: Server) -> [StepID] {
+        guard !KhalaPrivacy.reportsLocation else { return steps }
+        server.info.setSetting(value: ServerLocationPrivacy.never, for: .locationPrivacy)
+        return steps.filter { $0 != .location }
     }
 
     // MARK: - Navigation Methods
@@ -204,6 +211,8 @@ final class OnboardingPermissionsNavigationViewModel: NSObject, ObservableObject
     ///         permission is granted in the Settings app, and the flow moves on rather than
     ///         stranding the user on this step.
     func savePrivacyChoices(locationPrivacy: ServerLocationPrivacy, sensorPrivacy: ServerSensorPrivacy) {
+        // Khala: whatever was picked, the server receives no location and nothing is requested.
+        let locationPrivacy = KhalaPrivacy.reportsLocation ? locationPrivacy : .never
         onboardingServer.info.setSetting(value: sensorPrivacy, for: .sensorPrivacy)
         onboardingServer.info.setSetting(value: locationPrivacy, for: .locationPrivacy)
 
@@ -280,6 +289,17 @@ final class OnboardingPermissionsNavigationViewModel: NSObject, ObservableObject
     /// - Note: Opens settings if denied/restricted, grants immediately if already authorized,
     ///         or requests permission if not determined
     private func requestLocationPermission() {
+        // Khala: never asks iOS for location (`KhalaPrivacy`). Sharing ends as a refusal would; the local-access
+        // choices are stored as picked (home-network detection then works only if iOS already allows it).
+        guard KhalaPrivacy.reportsLocation else {
+            if locationPermissionContext == .shareWithHomeAssistant {
+                disableLocationSensor()
+                nextStep()
+            } else {
+                applyLocationPermissionNeeds()
+            }
+            return
+        }
         switch Current.location.permissionStatus() {
         case .denied, .restricted:
             guard locationPermissionContext != .lessSecureLocalConnection else {
@@ -365,7 +385,7 @@ extension OnboardingPermissionsNavigationViewModel: CLLocationManagerDelegate {
             break
         case .authorizedWhenInUse:
             // Limited location access - request always authorization for better functionality
-            manager.requestAlwaysAuthorization()
+            if KhalaPrivacy.reportsLocation { manager.requestAlwaysAuthorization() }
         case .authorized:
             // Legacy authorization status - handled below
             break

@@ -61,6 +61,8 @@ APP_TARGET = "App"
 # need its own App ID, provisioning and, for several, Apple-approval entitlements.
 KEEP_PRODUCT_TYPES = {"com.apple.product-type.framework"}
 ASSOCIATED_DOMAINS = "com.apple.developer.associated-domains"
+# Background modes the Khala build drops: it never reads the phone's location (Nir's rule).
+NO_BACKGROUND_MODES = {"location"}
 
 
 def fail(message):
@@ -399,6 +401,10 @@ def apply(args):
         info = plistlib.load(source)
     info["CFBundleDisplayName"] = DISPLAY_NAME
     info["CFBundleName"] = DISPLAY_NAME
+    # Khala never tracks the phone (Sources/Shared/Location/KhalaPrivacy.swift): no background location. The
+    # NSLocation* purpose strings stay: CoreLocation is still linked (SSID, upstream paths kept for rebases), and
+    # App Store processing asks for them by linkage (ITMS-90683, checked by verify-ipa).
+    info["UIBackgroundModes"] = [m for m in info.get("UIBackgroundModes", []) if m not in NO_BACKGROUND_MODES]
     with info_path.open("wb") as out:
         plistlib.dump(info, out, sort_keys=False)
 
@@ -434,6 +440,8 @@ def verify(args):
     require(info.get("CFBundleDisplayName") == DISPLAY_NAME and info.get("CFBundleName") == DISPLAY_NAME,
             "display name is not Khala")
     require(info.get("ITSAppUsesNonExemptEncryption") is False, "export-compliance key changed upstream")
+    modes = set(info.get("UIBackgroundModes", []))
+    require(not modes & NO_BACKGROUND_MODES, f"Info.plist still asks for background {sorted(modes & NO_BACKGROUND_MODES)}")
 
     iconset = json.loads((root / APPICONSET / "Contents.json").read_text())
     for image in iconset["images"]:
@@ -446,7 +454,7 @@ def verify(args):
                     f"AppIcon.icon layer {layer['image-name']} is missing")
     summary(f"- Khala identity verified: team {args.team}, prefix {args.prefix}, display name {DISPLAY_NAME}, "
             f"App embeds frameworks only ({', '.join(kept)}), no Siri vocabulary for unsupported intents, "
-            "no applinks, Khala icon installed.")
+            "no applinks, no background location, Khala icon installed.")
 
 
 # --- per-run xcodebuild inputs --------------------------------------------------------
@@ -946,6 +954,8 @@ def verify_ipa(args):
     for key, value in expected.items():
         require(info.get(key) == value, f"packaged app: {key} is {info.get(key)!r}, expected {value!r}")
     require(not nested, "packaged app still contains extensions or a watch app")
+    stray_modes = sorted(set(info.get("UIBackgroundModes", [])) & NO_BACKGROUND_MODES)
+    require(not stray_modes, f"packaged app still asks for background {stray_modes}")
     match = re.search(rb"<\?xml.*?</plist>", profile, re.S)
     require(match is not None, "embedded.mobileprovision carries no readable plist")
     provision = plistlib.loads(match.group(0))

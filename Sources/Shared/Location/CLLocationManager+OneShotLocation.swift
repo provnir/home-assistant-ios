@@ -4,6 +4,10 @@ import PromiseKit
 
 public extension CLLocationManager {
     static func oneShotLocation(timeout: TimeInterval) -> Promise<CLLocation> {
+        // Khala: no fix is ever taken; callers treat this like a denied permission (`KhalaPrivacy`).
+        guard KhalaPrivacy.reportsLocation else {
+            return Promise(error: OneShotError.clError(CLError(.denied)))
+        }
         // The proxy asserts main-thread invariants (CLLocationManager delegate callbacks need the main
         // run loop), but callers reach this from promise chains and Swift concurrency tasks on
         // arbitrary queues — which crashed in the field. Hop to main instead of trapping; stay

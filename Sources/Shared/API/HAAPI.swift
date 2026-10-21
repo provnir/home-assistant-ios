@@ -740,6 +740,10 @@ public class HomeAssistantAPI {
         location rawLocation: CLLocation?,
         zone: AppZone?
     ) -> Promise<Void> {
+        // Khala: never `update_location`; the sensors still go, without a location (`KhalaPrivacy`).
+        guard KhalaPrivacy.reportsLocation else {
+            return UpdateSensors(trigger: updateType, location: nil).asVoid()
+        }
         let supportsInZones = server.info.version >= .inZonesOnLocationUpdate
         let localMetadata = WebhookResponseLocation.localMetdata(
             trigger: updateType,
