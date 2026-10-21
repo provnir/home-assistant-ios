@@ -100,10 +100,10 @@ enum KhalaWebRTCPageMessage: Equatable {
             guard let sdp = json["sdp"] as? String, !sdp.isEmpty else { return nil }
             self = .offer(sdp: sdp)
         case "candidate":
-            guard let init_ = (json["candidate"] as? [String: Any]).flatMap(KhalaIceCandidate.init(json:)) else {
+            guard let candidate = (json["candidate"] as? [String: Any]).flatMap(KhalaIceCandidate.init(json:)) else {
                 return nil
             }
-            self = .candidate(init_)
+            self = .candidate(candidate)
         case "ice":
             guard let state = json["state"] as? String else { return nil }
             self = .ice(state: state)
