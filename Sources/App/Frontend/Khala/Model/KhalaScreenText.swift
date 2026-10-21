@@ -85,6 +85,10 @@ enum KhalaScreenText {
     static func limit(_ text: String) -> String { "Limit \(text)" }
 
     static let updating = "Updating…"
+    static let wakingCar = "Waking car…"
+    static let carDidntWake = "Car didn't wake"
+    static let retry = "Retry"
+    static let refreshNow = "Refresh now"
     static let share = "Share"
     static let goLive = "Go live"
 

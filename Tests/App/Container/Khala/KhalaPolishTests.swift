@@ -83,7 +83,7 @@ struct KhalaPageTabHoldTests {
 }
 
 struct KhalaEntityRefreshTests {
-    @Test func oneCallNamesWhatReportsNeverTheWakeButton() {
+    @Test func oneCallNamesWhatReportsNotButtons() {
         let now = Date(timeIntervalSince1970: 50000)
         let members = [
             Polish.entity("sensor.rover_battery", updated: now),
@@ -122,23 +122,27 @@ struct KhalaEntityRefreshTests {
         #expect(entity.lastUpdated == changed)
     }
 
-    @Test func atMostOneRefreshPerCarPerInterval() {
+    @Test func openingTheScreenAgainSoonDoesntWakeAndReadTwice() {
         var throttle = KhalaRefreshThrottle()
         let start = Date(timeIntervalSince1970: 0)
-        let r1 = throttle.shouldRefresh("rover", now: start, interval: KhalaRefreshThrottle.onAppear)
-        #expect(r1)
-        let r2 = throttle.shouldRefresh("rover", now: start.addingTimeInterval(30), interval: KhalaRefreshThrottle.onAppear)
-        #expect(!r2)
-        // Another car isn't held back.
-        let r3 = throttle.shouldRefresh("tank", now: start.addingTimeInterval(30), interval: KhalaRefreshThrottle.onAppear)
-        #expect(r3)
-        // Pull to refresh may come sooner than opening the screen again.
-        let r4 = throttle.shouldRefresh("rover", now: start.addingTimeInterval(30), interval: KhalaRefreshThrottle.onPull)
-        #expect(r4)
-        let r5 = throttle.shouldRefresh("rover", now: start.addingTimeInterval(40), interval: KhalaRefreshThrottle.onPull)
-        #expect(!r5)
-        let r6 = throttle.shouldRefresh("rover", now: start.addingTimeInterval(91), interval: KhalaRefreshThrottle.onAppear)
-        #expect(r6)
+        #expect(throttle.allowsAutomatic("rover", now: start))
+        let began = throttle.begin("rover")
+        #expect(began)
+        // Never two at once, explicit or not.
+        let again = throttle.begin("rover")
+        #expect(!again)
+        #expect(!throttle.allowsAutomatic("rover", now: start.addingTimeInterval(5)))
+        throttle.finish("rover", now: start.addingTimeInterval(20), completed: true)
+        // Within a minute of the completed read: the screen opening doesn't refresh; another car isn't held back.
+        #expect(!throttle.allowsAutomatic("rover", now: start.addingTimeInterval(70)))
+        #expect(throttle.allowsAutomatic("tank", now: start.addingTimeInterval(70)))
+        // "Refresh now" always runs (it only needs nothing running).
+        let explicit = throttle.begin("rover")
+        #expect(explicit)
+        throttle.finish("rover", now: start.addingTimeInterval(90), completed: false)
+        // A failed run (the car didn't wake) doesn't hold the next automatic one back.
+        #expect(throttle.allowsAutomatic("rover", now: start.addingTimeInterval(95)))
+        #expect(throttle.allowsAutomatic("rover", now: start.addingTimeInterval(20 + 60)))
     }
 }
 
@@ -209,5 +213,42 @@ struct KhalaCaptureTests {
         let nodes = KhalaMediaNode.children(of: response)
         #expect(nodes.count == 2)
         #expect(nodes.first?.canExpand == true)
+    }
+}
+
+struct KhalaCarWakePlanTests {
+    private static func layout(_ change: (inout [KhalaEntity]) -> Void) -> KhalaCarLayout {
+        var members = KhalaScreenFixtures.car
+        change(&members)
+        return KhalaCarLayout(name: "Rover", members: members, attributes: KhalaScreenFixtures.carAttributes)
+    }
+
+    private static func status(_ state: String) -> KhalaEntity {
+        KhalaScreenFixtures.entity("binary_sensor.rover_status", state, ["device_class": "connectivity"],
+                                   device: "rover", deviceName: "Rover")
+    }
+
+    @Test func aRefreshWakesAnAsleepOrOfflineCarAndWaits() {
+        let asleep = Self.layout { _ in }
+        #expect(asleep.wakePlan == .pressAndWait(button: "button.rover_wake", connectivity: "binary_sensor.rover_status"))
+        // Offline (an unavailable sensor) wakes and waits too.
+        let offline = Self.layout { members in
+            members.removeAll { $0.entityId == "binary_sensor.rover_status" }
+            members.append(Self.status("unavailable"))
+        }
+        #expect(offline.wakePlan == .pressAndWait(button: "button.rover_wake", connectivity: "binary_sensor.rover_status"))
+    }
+
+    @Test func anAwakeCarIsReadStraightAway() {
+        let awake = Self.layout { members in
+            members.removeAll { $0.entityId == "binary_sensor.rover_status" }
+            members.append(Self.status("on"))
+        }
+        #expect(awake.wakePlan == .none)
+        let noButton = Self.layout { $0.removeAll { $0.entityId == "button.rover_wake" } }
+        #expect(noButton.wakePlan == .none)
+        // A wake button but no sensor to wait on: press it, then read.
+        let noSensor = Self.layout { $0.removeAll { $0.entityId == "binary_sensor.rover_status" } }
+        #expect(noSensor.wakePlan == .press(button: "button.rover_wake"))
     }
 }

@@ -32,6 +32,8 @@ struct KhalaCarLayout: Equatable {
     var chargeCurrent: KhalaNumberSetting?
     var tracker: KhalaEntity?
     var wakeButtonId: String?
+    /// The car's connectivity sensor (on = awake), whatever its state.
+    var connectivityId: String?
     /// Nil when the car reports no connectivity.
     var isAwake: Bool?
     var overview: [KhalaControl] = []
@@ -90,8 +92,9 @@ struct KhalaCarLayout: Equatable {
         self.wakeButtonId = visible.first { $0.domain == "button" && has($0, "wake") }?.entityId
         if let status = visible.first(where: {
             $0.domain == "binary_sensor" && $0.deviceClass == "connectivity" && !has($0, "cable", "charg")
-        }), !status.isUnavailable {
-            self.isAwake = status.state == "on"
+        }) {
+            self.connectivityId = status.entityId
+            if !status.isUnavailable { self.isAwake = status.state == "on" }
         }
 
         // Climate.
@@ -161,9 +164,14 @@ struct KhalaCarLayout: Equatable {
         self.chargingControls = chargingControls.sorted(by: Self.tileOrder)
     }
 
-    /// Whether a command should wake the car first: it reports being asleep and has a wake button. Khala never
-    /// wakes a car just because its screen opened.
-    var needsWake: Bool { isAwake == false && wakeButtonId != nil }
+    /// How to get the car awake before reading it or sending it a command (Nir: a refresh must wake the car to
+    /// read its status, and commands can't reach a sleeping car).
+    var wakePlan: KhalaCarWakePlan {
+        guard let wakeButtonId else { return .none }
+        guard let connectivityId else { return .press(button: wakeButtonId) }
+        // Asleep, offline or unknown (an unavailable sensor): wake and wait until the sensor says it's online.
+        return isAwake == true ? .none : .pressAndWait(button: wakeButtonId, connectivity: connectivityId)
+    }
 
     /// The car's place in words: "At home", "Away", a zone name.
     var placeText: String? {
@@ -196,4 +204,28 @@ extension KhalaCarLayout.Climate {
     func setTarget(_ value: Double) -> KhalaServiceCall {
         KhalaServiceCall("climate", "set_temperature", entityId: entityId, data: ["temperature": value])
     }
+}
+
+/// What waking a car takes (`KhalaCarLayout.wakePlan`).
+enum KhalaCarWakePlan: Equatable {
+    /// Awake already, or nothing to wake it with.
+    case none
+    /// Press the wake button, then wait until the connectivity sensor reports the car online.
+    case pressAndWait(button: String, connectivity: String)
+    /// Press the wake button; there is no sensor to wait on.
+    case press(button: String)
+
+    /// How long to wait for a car to come online before saying it didn't wake.
+    static let timeout: TimeInterval = 60
+}
+
+/// Where a car screen's wake-and-read stands (`KhalaCarView`).
+enum KhalaCarSyncState: Equatable {
+    case idle
+    /// The wake button was pressed; waiting for the car to come online.
+    case waking
+    /// `homeassistant.update_entity` is out.
+    case updating
+    /// The car didn't come online in time; "Retry" runs it again.
+    case didntWake
 }

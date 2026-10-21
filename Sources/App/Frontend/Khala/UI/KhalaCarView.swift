@@ -1,6 +1,7 @@
 import SFSafeSymbols
 import Shared
 import SwiftUI
+import UIKit
 
 /// A car's screen (mockup `DayCar`), built from whatever its Home Assistant device exposes (`KhalaCarLayout`):
 /// Overview (top-down car, battery with the charge-limit tick, controls grid, recent arrivals/departures),
@@ -15,8 +16,8 @@ struct KhalaCarView: View {
 
     @State private var tab = 0
     @State private var presence: [KhalaPresenceChange] = []
-    /// A refresh was asked for and no newer data has arrived yet.
-    @State private var refreshStarted: Date?
+    /// Waking the car / asking for fresh data, shown on the trailing pill.
+    @State private var sync: KhalaCarSyncState = .idle
 
     private static let tabs = [
         KhalaSubTab(title: KhalaScreenText.overview, symbol: .car),
@@ -38,7 +39,7 @@ struct KhalaCarView: View {
                 selection: $tab,
                 category: .car,
                 title: { KhalaLargeTitle(text: device.name) },
-                trailing: { wakePill(car) },
+                trailing: { syncPill(car) },
                 content: {
                     switch tab {
                     case 1: climate(car)
@@ -46,14 +47,11 @@ struct KhalaCarView: View {
                     default: overview(car)
                     }
                 },
-                onRefresh: { await refresh(interval: KhalaRefreshThrottle.onPull) }
+                onRefresh: { await refresh(explicit: true) }
             )
         }
-        // Opening the screen asks the integration for fresh data (throttled; never wakes the car).
-        .task(id: device.id) { await refresh(interval: KhalaRefreshThrottle.onAppear) }
-        .onChange(of: lastUpdated) { updated in
-            if let started = refreshStarted, let updated, updated >= started { refreshStarted = nil }
-        }
+        // Opening the screen wakes the car if it sleeps and reads it (not again within a minute of the last read).
+        .task(id: device.id) { await refresh(explicit: false) }
         .task(id: car.tracker?.entityId) {
             guard let tracker = car.tracker?.entityId else { return }
             let history = await actions.history(
@@ -82,42 +80,92 @@ struct KhalaCarView: View {
         KhalaEntityRefresh.lastUpdated(of: live.members(of: device))
     }
 
-    /// "Updating…" while a refresh is out (at most 20 s), else "Updated 4 min ago".
+    /// "Car didn't wake" after a failed wake, else "Updated 4 min ago".
     private func freshness(now: Date) -> String? {
-        if let refreshStarted, now.timeIntervalSince(refreshStarted) < 20 { return KhalaScreenText.updating }
+        if sync == .didntWake { return KhalaScreenText.carDidntWake }
         return lastUpdated.map { KhalaScreenText.updated($0, now: now) }
     }
 
-    /// `homeassistant.update_entity` for the car's entities, throttled per car. Only reads: the wake button is
-    /// never named or pressed, so a sleeping car answers from what the integration last had.
-    private func refresh(interval: TimeInterval) async {
-        let started = Current.date()
-        guard await actions.refresh(deviceKey: device.id, members: live.members(of: device), interval: interval) else {
+    /// Wakes the car when it sleeps (Nir: a refresh must wake it to read its status), then
+    /// `homeassistant.update_entity` for its entities. Opening the screen skips it within a minute of the last
+    /// completed refresh; "Refresh now" and pull to refresh always run (never two at once).
+    private func refresh(explicit: Bool) async {
+        let key = actions.refreshKey(device.id)
+        if !explicit, !KhalaScreenActions.refreshes.allowsAutomatic(key, now: Current.date()) { return }
+        guard KhalaScreenActions.refreshes.begin(key) else { return }
+        guard await wake() else {
+            KhalaScreenActions.refreshes.finish(key, now: Current.date(), completed: false)
+            sync = .didntWake
             return
         }
-        if let lastUpdated, lastUpdated >= started { return }
-        refreshStarted = started
+        sync = .updating
+        let ok = await actions.updateEntities(of: live.members(of: device))
+        KhalaScreenActions.refreshes.finish(key, now: Current.date(), completed: ok)
+        sync = .idle
     }
 
-    @ViewBuilder
-    private func wakePill(_ car: KhalaCarLayout) -> some View {
-        if let wake = car.wakeButtonId, car.isAwake != true {
-            Button {
-                Task { await actions.perform(KhalaServiceCall("button", "press", entityId: wake)) }
-            } label: {
-                HStack(spacing: 7) {
-                    Image(systemSymbol: .moonFill)
+    /// Presses the wake button when the car is asleep or offline and waits (up to `KhalaCarWakePlan.timeout`) for
+    /// its connectivity sensor to report it online. True when it is awake, or there is nothing to wake it with.
+    private func wake() async -> Bool {
+        switch layout.wakePlan {
+        case .none:
+            return true
+        case let .press(button):
+            sync = .waking
+            return await actions.press(button)
+        case let .pressAndWait(button, connectivity):
+            sync = .waking
+            guard await actions.press(button) else { return false }
+            let deadline = Current.date().addingTimeInterval(KhalaCarWakePlan.timeout)
+            // The live states follow the websocket, so the sensor flips here as soon as Home Assistant sees it.
+            while Current.date() < deadline, !Task.isCancelled {
+                if live.entitiesById[connectivity]?.state == "on" { return true }
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+            }
+            return live.entitiesById[connectivity]?.state == "on"
+        }
+    }
+
+    /// Top right: "Refresh now" (a moon while the car sleeps), "Waking car…", "Updating…", or "Retry" after a
+    /// failed wake.
+    private func syncPill(_ car: KhalaCarLayout) -> some View {
+        Button {
+            Task { await refresh(explicit: true) }
+        } label: {
+            HStack(spacing: 7) {
+                switch sync {
+                case .waking, .updating:
+                    ProgressView()
+                        .controlSize(.small)
+                case .didntWake:
+                    Image(systemSymbol: .exclamationmarkTriangleFill)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(KhalaTheme.accent(.water))
+                case .idle:
+                    Image(systemSymbol: car.isAwake == false ? .moonFill : .arrowClockwise)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(KhalaTheme.tertiary)
-                    Text(car.isAwake == false ? KhalaScreenText.asleep : KhalaScreenText.wake)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(KhalaTheme.ink)
                 }
-                .padding(.horizontal, 16)
-                .frame(height: 44)
-                .khalaGlass(in: Capsule(), interactive: true)
+                Text(syncTitle)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(KhalaTheme.ink)
             }
-            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+            .frame(height: 44)
+            .khalaGlass(in: Capsule(), interactive: true)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(sync == .waking || sync == .updating)
+        .animation(.easeOut(duration: 0.2), value: sync)
+    }
+
+    private var syncTitle: String {
+        switch sync {
+        case .idle: return KhalaScreenText.refreshNow
+        case .waking: return KhalaScreenText.wakingCar
+        case .updating: return KhalaScreenText.updating
+        case .didntWake: return KhalaScreenText.retry
         }
     }
 
@@ -230,14 +278,25 @@ struct KhalaCarView: View {
         .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
-    /// Sends a car command, pressing the car's wake button first while it reports being asleep. Opening the
-    /// screen never wakes it.
+    /// Sends a car command: wakes the car first while it is asleep or offline (and waits for it), then sends the
+    /// command, then reads the car again so the screen shows the result.
     private func send(_ call: KhalaServiceCall, car: KhalaCarLayout) {
         Task {
-            if car.needsWake, let wake = car.wakeButtonId, call.entityId != wake {
-                await actions.perform(KhalaServiceCall("button", "press", entityId: wake))
+            if call.entityId != car.wakeButtonId, car.wakePlan != .none {
+                guard await wake() else {
+                    sync = .didntWake
+                    UINotificationFeedbackGenerator().notificationOccurred(.error)
+                    return
+                }
+                sync = .idle
             }
-            await actions.perform(call)
+            guard await actions.perform(call) else { return }
+            let key = actions.refreshKey(device.id)
+            guard KhalaScreenActions.refreshes.begin(key) else { return }
+            sync = .updating
+            let ok = await actions.updateEntities(of: live.members(of: device))
+            KhalaScreenActions.refreshes.finish(key, now: Current.date(), completed: ok)
+            sync = .idle
         }
     }
 

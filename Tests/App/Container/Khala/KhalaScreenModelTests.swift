@@ -40,7 +40,13 @@ struct KhalaCarLayoutTests {
         #expect(layout.overview.first { $0.title == "Flash lights" }?.call?.service == "press")
         #expect(layout.moreControls.map(\.title) == ["Homelink", "Play sound"])
         #expect(layout.mediaPlayerId == "media_player.rover_media_player")
-        #expect(layout.needsWake)
+        // Asleep: a refresh or a command wakes it and waits for the connectivity sensor.
+        if case let .pressAndWait(button, connectivity) = layout.wakePlan {
+            #expect(button == "button.rover_wake")
+            #expect(connectivity.hasPrefix("binary_sensor."))
+        } else {
+            Issue.record("an asleep car with a wake button and a connectivity sensor should wake and wait")
+        }
     }
 
     @Test func carMediaStaysOnTheCar() {

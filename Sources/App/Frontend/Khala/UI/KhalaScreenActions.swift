@@ -20,19 +20,28 @@ struct KhalaScreenActions {
         return ok
     }
 
-    /// Throttled per device across every screen (`KhalaRefreshThrottle`).
-    @MainActor private static var refreshThrottle = KhalaRefreshThrottle()
+    /// Refreshes per device across every screen (`KhalaRefreshThrottle`).
+    @MainActor static var refreshes = KhalaRefreshThrottle()
+
+    /// The throttle key of a device on this server.
+    func refreshKey(_ deviceId: String) -> String {
+        server.identifier.rawValue + "|" + deviceId
+    }
 
     /// Asks Home Assistant to poll a device's entities again (`KhalaEntityRefresh`): one quiet
-    /// `homeassistant.update_entity` call, at most once per `interval` for `deviceKey`. False when throttled,
-    /// when there is nothing to name, or when Home Assistant refused.
+    /// `homeassistant.update_entity` call, answered once they have been polled. False when there was nothing to
+    /// name or Home Assistant refused.
     @MainActor
-    func refresh(deviceKey: String, members: [KhalaEntity], interval: TimeInterval) async -> Bool {
+    func updateEntities(of members: [KhalaEntity]) async -> Bool {
         let entityIds = KhalaEntityRefresh.entityIds(of: members)
         guard !entityIds.isEmpty else { return false }
-        let key = server.identifier.rawValue + "|" + deviceKey
-        guard Self.refreshThrottle.shouldRefresh(key, now: Current.date(), interval: interval) else { return false }
         return await send(.updateEntities(entityIds))
+    }
+
+    /// Presses a button without the success/error haptic (the car's wake button during a refresh).
+    @MainActor
+    func press(_ buttonId: String) async -> Bool {
+        await send(KhalaServiceCall("button", "press", entityId: buttonId))
     }
 
     /// Sends a `call_service`; true when Home Assistant accepted it. Failures are logged.

@@ -3,11 +3,9 @@ import Foundation
 /// Asking Home Assistant to poll a device again (`homeassistant.update_entity`), for screens whose data the
 /// integration only refreshes now and then — a car's (build 19.1: "car data never refreshes"). One call names the
 /// device's entities; a coordinator-based integration answers it with one refresh of its coordinator (its
-/// `async_request_refresh` is debounced), a polling one polls each entity.
-///
-/// `update_entity` reads; it never acts. Still, only entities that report something are named: no buttons (a car's
-/// wake button stays the person's to press — waking a car costs battery and is never automatic), no events,
-/// updates, scenes or scripts.
+/// `async_request_refresh` is debounced), a polling one polls each entity. A sleeping car is woken first
+/// (`KhalaCarWakePlan`); `update_entity` itself only reads, so buttons, events, updates, scenes and scripts are
+/// left out of the call.
 enum KhalaEntityRefresh {
     /// Domains never named in a refresh.
     static let skippedDomains: Set<String> = ["button", "event", "update", "scene", "script", "notify", "image", "tts"]
@@ -24,20 +22,30 @@ enum KhalaEntityRefresh {
     }
 }
 
-/// At most one refresh per device per interval, so opening a screen repeatedly, or pulling to refresh, doesn't
-/// hammer a cloud API (a car's integration usually has a rate limit).
+/// Keeps a device's refresh from double-firing: opening its screen again soon after a refresh completed doesn't
+/// wake and poll it again; an explicit "Refresh now" always runs (but never two at once).
 struct KhalaRefreshThrottle {
-    /// Opening the screen.
-    static let onAppear: TimeInterval = 60
-    /// Pull to refresh: asked for explicitly, so sooner.
-    static let onPull: TimeInterval = 15
+    /// An automatic refresh is skipped this soon after the last one completed.
+    static let interval: TimeInterval = 60
 
-    private(set) var lastRequests: [String: Date] = [:]
+    private(set) var completed: [String: Date] = [:]
+    private(set) var running: Set<String> = []
 
-    /// True (and remembered) when `key` may refresh now: never asked, or last asked at least `interval` ago.
-    mutating func shouldRefresh(_ key: String, now: Date, interval: TimeInterval) -> Bool {
-        if let last = lastRequests[key], now.timeIntervalSince(last) < interval, now >= last { return false }
-        lastRequests[key] = now
-        return true
+    /// Whether opening the screen should refresh `key` now.
+    func allowsAutomatic(_ key: String, now: Date) -> Bool {
+        guard !running.contains(key) else { return false }
+        guard let last = completed[key], now >= last else { return true }
+        return now.timeIntervalSince(last) >= Self.interval
+    }
+
+    /// Marks a refresh of `key` as running; false when one already is.
+    mutating func begin(_ key: String) -> Bool {
+        running.insert(key).inserted
+    }
+
+    /// Marks it done; a completed one holds automatic refreshes back for `interval`, a failed one doesn't.
+    mutating func finish(_ key: String, now: Date, completed didComplete: Bool) {
+        running.remove(key)
+        if didComplete { completed[key] = now }
     }
 }
