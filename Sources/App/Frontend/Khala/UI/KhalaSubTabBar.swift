@@ -9,19 +9,15 @@ import UIKit
 /// screen's sides (`KhalaSubTabMetrics`), floating over content that scrolls on underneath — like the iOS 26
 /// floating tab bars, not a full-width footer (Nir, build 19.1).
 ///
-/// The selection lens is ONE view that stays mounted and moves to the chosen tab (its offset animates with
-/// `motion`, keyed on `selection`), so it slides on every change — a tap here, or a selection that arrives later
-/// from elsewhere (a Home Assistant page reporting its tab). Build 19.1 drew a lens per tab (`if index ==
-/// selection`) and relied on `glassEffectID` to morph between them; the lens sat inside the bar's own glass and
-/// the morph never showed, so the lens jumped.
-///
-/// iOS 26: real Liquid Glass. The bar is `.glassEffect(.regular.interactive())` in a `GlassEffectContainer`; the
-/// lens is an accent-tinted interactive glass capsule. Touches flex the glass (`interactive()`) and press the tab
-/// (`KhalaPressStyle`). Before iOS 26: the regular material, the lens a tinted capsule.
+/// iOS 26+: the SYSTEM tab bar (`KhalaSystemTabBar`, a standalone `UITabBar`) — UIKit's own Liquid Glass platter,
+/// selection capsule, press-and-drag scrubbing with the lens, morph and haptics (Nir, build 24.1). Before iOS 26:
+/// the custom bar below — the regular material, and ONE tinted lens view that stays mounted and slides to the
+/// chosen tab (its offset animates with `motion`, keyed on `selection`), whether the change came from a tap here
+/// or from elsewhere (a Home Assistant page reporting its tab).
 ///
 /// Why not the system `TabView`: a lifted Home Assistant page has one web view under all its tabs and switches
-/// them through the frontend's own tab links, which a `TabView` (one content view per tab) can't host; one bar
-/// for every screen keeps the look and the motion identical.
+/// them through the frontend's own tab links, which a `TabView` (one content view per tab) can't host; a bare
+/// `UITabBar` only reports selections, so one bar serves every screen.
 struct KhalaSubTabBar: View {
     let tabs: [KhalaSubTab]
     @Binding var selection: Int
@@ -45,37 +41,27 @@ struct KhalaSubTabBar: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            let tabWidth = CGFloat(KhalaSubTabMetrics.tabWidth(available: Double(proxy.size.width), count: tabs.count))
-            Group {
-                if #available(iOS 26.0, *) {
-                    glassBar(tabWidth: tabWidth)
-                } else {
-                    materialBar(tabWidth: tabWidth)
-                }
+        if #available(iOS 26.0, *) {
+            // The system draws and sizes all of it; it plays its own haptics.
+            KhalaSystemTabBar(
+                tabs: tabs,
+                selection: $selection,
+                accent: accent,
+                motion: Self.motion(reduceMotion: reduceMotion)
+            )
+        } else {
+            GeometryReader { proxy in
+                let tabWidth = CGFloat(KhalaSubTabMetrics.tabWidth(available: Double(proxy.size.width), count: tabs.count))
+                materialBar(tabWidth: tabWidth)
+                    .frame(maxWidth: .infinity)
             }
-            .frame(maxWidth: .infinity)
-        }
-        .frame(height: CGFloat(KhalaSubTabMetrics.barHeight))
-        .padding(.bottom, 8)
-        .sensoryFeedbackIfAvailable(selection)
-    }
-
-    // MARK: - iOS 26
-
-    @available(iOS 26.0, *)
-    private func glassBar(tabWidth: CGFloat) -> some View {
-        GlassEffectContainer(spacing: 0) {
-            row(tabWidth: tabWidth) {
-                Capsule()
-                    .fill(Color.clear)
-                    .glassEffect(.regular.tint(accent.opacity(0.2)).interactive(), in: Capsule())
-            }
-            .glassEffect(.regular.interactive(), in: Capsule())
+            .frame(height: CGFloat(KhalaSubTabMetrics.barHeight))
+            .padding(.bottom, 8)
+            .sensoryFeedbackIfAvailable(selection)
         }
     }
 
-    // MARK: - Before iOS 26
+    // MARK: - Before iOS 26 (the custom bar)
 
     private func materialBar(tabWidth: CGFloat) -> some View {
         row(tabWidth: tabWidth) {
