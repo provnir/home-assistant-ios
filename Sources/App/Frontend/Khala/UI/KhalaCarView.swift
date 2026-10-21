@@ -15,6 +15,8 @@ struct KhalaCarView: View {
 
     @State private var tab = 0
     @State private var presence: [KhalaPresenceChange] = []
+    /// A refresh was asked for and no newer data has arrived yet.
+    @State private var refreshStarted: Date?
 
     private static let tabs = [
         KhalaSubTab(title: KhalaScreenText.overview, symbol: .car),
@@ -28,21 +30,30 @@ struct KhalaCarView: View {
 
     var body: some View {
         let car = layout
-        KhalaDeviceScreen(
-            subtitle: subtitle(car),
-            tabs: Self.tabs,
-            selection: $tab,
-            category: .car,
-            title: { KhalaLargeTitle(text: device.name) },
-            trailing: { wakePill(car) },
-            content: {
-                switch tab {
-                case 1: climate(car)
-                case 2: charging(car)
-                default: overview(car)
-                }
-            }
-        )
+        // The "Updated 4 min ago" line ages on its own, between state changes.
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            KhalaDeviceScreen(
+                subtitle: subtitle(car, now: context.date),
+                tabs: Self.tabs,
+                selection: $tab,
+                category: .car,
+                title: { KhalaLargeTitle(text: device.name) },
+                trailing: { wakePill(car) },
+                content: {
+                    switch tab {
+                    case 1: climate(car)
+                    case 2: charging(car)
+                    default: overview(car)
+                    }
+                },
+                onRefresh: { await refresh(interval: KhalaRefreshThrottle.onPull) }
+            )
+        }
+        // Opening the screen asks the integration for fresh data (throttled; never wakes the car).
+        .task(id: device.id) { await refresh(interval: KhalaRefreshThrottle.onAppear) }
+        .onChange(of: lastUpdated) { updated in
+            if let started = refreshStarted, let updated, updated >= started { refreshStarted = nil }
+        }
         .task(id: car.tracker?.entityId) {
             guard let tracker = car.tracker?.entityId else { return }
             let history = await actions.history(
@@ -55,13 +66,37 @@ struct KhalaCarView: View {
 
     // MARK: - Header
 
-    private func subtitle(_ car: KhalaCarLayout) -> String? {
+    private func subtitle(_ car: KhalaCarLayout, now: Date) -> String? {
         let model = device.memberEntityIds.lazy
             .compactMap { live.entitiesById[$0]?.deviceId }
             .compactMap { live.deviceModels[$0] }
             .first
-        let parts = [model, car.placeText].compactMap { $0 }
+        let parts = [model, car.placeText, freshness(now: now)].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    // MARK: - Refresh
+
+    /// The newest `last_updated` among the car's entities (`KhalaEntityRefresh`).
+    private var lastUpdated: Date? {
+        KhalaEntityRefresh.lastUpdated(of: live.members(of: device))
+    }
+
+    /// "Updating…" while a refresh is out (at most 20 s), else "Updated 4 min ago".
+    private func freshness(now: Date) -> String? {
+        if let refreshStarted, now.timeIntervalSince(refreshStarted) < 20 { return KhalaScreenText.updating }
+        return lastUpdated.map { KhalaScreenText.updated($0, now: now) }
+    }
+
+    /// `homeassistant.update_entity` for the car's entities, throttled per car. Only reads: the wake button is
+    /// never named or pressed, so a sleeping car answers from what the integration last had.
+    private func refresh(interval: TimeInterval) async {
+        let started = Current.date()
+        guard await actions.refresh(deviceKey: device.id, members: live.members(of: device), interval: interval) else {
+            return
+        }
+        if let lastUpdated, lastUpdated >= started { return }
+        refreshStarted = started
     }
 
     @ViewBuilder

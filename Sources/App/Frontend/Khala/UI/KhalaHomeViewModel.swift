@@ -122,6 +122,7 @@ final class KhalaHomeViewModel: ObservableObject {
                 state: entity.state,
                 lastChanged: entity.lastChanged,
                 attributes: entity.attributes.dictionary,
+                lastUpdated: entity.lastUpdated,
                 deviceId: facts?.deviceId,
                 deviceName: facts?.deviceName,
                 isAuxiliary: facts?.isAuxiliary ?? false

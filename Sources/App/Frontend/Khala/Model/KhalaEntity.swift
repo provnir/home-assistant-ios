@@ -12,6 +12,8 @@ struct KhalaEntity: Equatable {
     let deviceClass: String?
     let unit: String?
     let lastChanged: Date
+    /// When Home Assistant last wrote the entity (state or attributes); `lastChanged` when not given.
+    let lastUpdated: Date
 
     /// Registry device the entity belongs to, if any.
     let deviceId: String?
@@ -37,6 +39,7 @@ struct KhalaEntity: Equatable {
         state: String,
         lastChanged: Date,
         attributes: [String: Any],
+        lastUpdated: Date? = nil,
         deviceId: String? = nil,
         deviceName: String? = nil,
         isAuxiliary: Bool = false
@@ -49,6 +52,7 @@ struct KhalaEntity: Equatable {
         self.deviceClass = KhalaValue.string(attributes["device_class"])
         self.unit = KhalaValue.string(attributes["unit_of_measurement"])
         self.lastChanged = lastChanged
+        self.lastUpdated = max(lastUpdated ?? lastChanged, lastChanged)
         self.deviceId = deviceId
         self.deviceName = deviceName
         self.isAuxiliary = isAuxiliary

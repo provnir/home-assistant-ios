@@ -2,12 +2,14 @@ import SFSafeSymbols
 import SwiftUI
 
 /// A past event on the timeline (a camera detection): thumbnail with a category badge, title and subtitle on a
-/// solid white card. The thumbnail is a tinted placeholder for now; the event's own snapshot needs the recorder or
-/// the camera integration's media source.
+/// solid white card. The thumbnail is the capture saved for the detection (`KhalaCaptureThumbnail`, from the
+/// shell's `KhalaCaptureSource`), the tinted placeholder when there is none.
 struct KhalaEventCard: View {
     let title: String
     let subtitle: String?
     let category: KhalaCategory
+    /// The detection whose capture is the thumbnail.
+    var capture: KhalaCaptureRef?
     let action: () -> Void
 
     static let height: CGFloat = 72
@@ -15,8 +17,7 @@ struct KhalaEventCard: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(KhalaTheme.thumbnail)
+                KhalaCaptureThumbnail(ref: capture, category: category)
                     .frame(width: 64, height: 48)
                     .overlay(alignment: .bottomTrailing) {
                         Circle()

@@ -6,7 +6,8 @@ import UIKit
 /// One camera's screen (mockups `DayCamera` / `DayCameraPicker`). The title is a pull-down of every camera; Live
 /// hosts the app's own native player in a card (full screen opens the app's camera overlay) with Snapshot and — when
 /// the camera has a notifications switch — Mute; then "Today on <camera>" from its event entities. Events lists its
-/// detections of the last week (recorder history); Settings shows what Home Assistant says about it.
+/// detections of the last week (recorder history); Settings shows what Home Assistant says about it. A detection
+/// shows the still the home saved for it (`KhalaCaptureSource`); a tap opens it full screen, never the stream.
 struct KhalaCameraView: View {
     let cameraEntityId: String
     let server: Server
@@ -17,12 +18,16 @@ struct KhalaCameraView: View {
     let onSelectCamera: (String) -> Void
     let onAllCameras: () -> Void
     let onFullScreen: (String, String?) -> Void
+    /// A detection's capture, full screen (`KhalaShellModel.openCapture`).
+    let onCapture: (KhalaEntity, Date) -> Void
 
     @State private var tab = 0
     @State private var showsPicker = false
     @State private var history: [String: [KhalaHistoryState]]? = nil
     @State private var snapshot: KhalaSnapshot? = nil
     @State private var snapshotFailed = false
+    /// The player the live card settled on (WebRTC first when the camera offers it, `CameraStreamPlan`).
+    @State private var livePlayer: CameraPlayerType?
 
     private static let tabs = [
         KhalaSubTab(title: KhalaScreenText.live, symbol: .videoFill),
@@ -119,12 +124,20 @@ struct KhalaCameraView: View {
         let mute = KhalaCameraCatalog.notificationSwitch(for: camera, in: live.entities)
         VStack(spacing: 8) {
             ZStack(alignment: .topLeading) {
-                KhalaCameraLivePlayer(server: server, cameraEntityId: camera.entityId, cameraName: camera.name)
-                    .id(camera.entityId)
+                KhalaCameraLivePlayer(
+                    server: server,
+                    cameraEntityId: camera.entityId,
+                    cameraName: camera.name,
+                    poster: { await actions.thumbnail(cameraEntityId: camera.entityId) },
+                    onPlayer: { livePlayer = $0 }
+                )
+                .id(camera.entityId)
                 badge {
                     HStack(spacing: 6) {
                         Circle().fill(Color(red: 0.847, green: 0.278, blue: 0.231)).frame(width: 6, height: 6)
-                        Text(KhalaScreenText.live.uppercased())
+                        // "LIVE · WEBRTC": which player is on, so a laggy stream can be told from a fallback.
+                        Text(([KhalaScreenText.live] + (livePlayer.map { [Self.playerName($0)] } ?? []))
+                            .joined(separator: " · ").uppercased())
                             .font(.system(size: 11, weight: .bold))
                             .kerning(0.8)
                     }
@@ -174,6 +187,14 @@ struct KhalaCameraView: View {
         todayTimeline(camera, today: today)
     }
 
+    private static func playerName(_ player: CameraPlayerType) -> String {
+        switch player {
+        case .webRTC: return "WebRTC"
+        case .hls: return "HLS"
+        case .mjpeg: return "MJPEG"
+        }
+    }
+
     private func badge<BadgeContent: View>(@ViewBuilder _ label: () -> BadgeContent) -> some View {
         label()
             .foregroundStyle(KhalaTheme.ink)
@@ -218,8 +239,13 @@ struct KhalaCameraView: View {
                     lineAbove: index == 0 ? nil : KhalaTheme.ink,
                     lineBelow: KhalaTheme.ink
                 ) {
-                    KhalaEventCard(title: detection.noun, subtitle: detection.source, category: .security) {
-                        tab = 1
+                    KhalaEventCard(
+                        title: detection.noun,
+                        subtitle: detection.source,
+                        category: .security,
+                        capture: KhalaCaptureRef(cameraEntityId: camera.entityId, date: detection.date)
+                    ) {
+                        onCapture(camera, detection.date)
                     }
                 }
             }
@@ -271,21 +297,33 @@ struct KhalaCameraView: View {
                     VStack(spacing: 0) {
                         let items = days[day] ?? []
                         ForEach(items) { detection in
-                            HStack(spacing: 12) {
-                                Text(KhalaText.time(detection.date, calendar: calendar))
-                                    .font(KhalaTheme.time)
-                                    .foregroundStyle(KhalaTheme.muted)
-                                    .frame(width: KhalaTheme.timeColumn, alignment: .leading)
-                                Text(detection.noun)
-                                    .font(KhalaTheme.cardTitle)
-                                    .foregroundStyle(KhalaTheme.ink)
-                                Text(detection.source)
-                                    .font(KhalaTheme.secondaryText)
-                                    .foregroundStyle(KhalaTheme.tertiary)
-                                    .lineLimit(1)
-                                Spacer(minLength: 0)
+                            Button {
+                                onCapture(camera, detection.date)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    KhalaCaptureThumbnail(
+                                        ref: KhalaCaptureRef(cameraEntityId: camera.entityId, date: detection.date),
+                                        category: .security,
+                                        cornerRadius: 10
+                                    )
+                                    .frame(width: 56, height: 42)
+                                    Text(KhalaText.time(detection.date, calendar: calendar))
+                                        .font(KhalaTheme.time)
+                                        .foregroundStyle(KhalaTheme.muted)
+                                        .frame(width: KhalaTheme.timeColumn, alignment: .leading)
+                                    Text(detection.noun)
+                                        .font(KhalaTheme.cardTitle)
+                                        .foregroundStyle(KhalaTheme.ink)
+                                    Text(detection.source)
+                                        .font(KhalaTheme.secondaryText)
+                                        .foregroundStyle(KhalaTheme.tertiary)
+                                        .lineLimit(1)
+                                    Spacer(minLength: 0)
+                                }
+                                .padding(.vertical, 8)
+                                .contentShape(Rectangle())
                             }
-                            .padding(.vertical, 10)
+                            .buttonStyle(.plain)
                             .accessibilityElement(children: .combine)
                             if detection.id != items.last?.id { Divider() }
                         }

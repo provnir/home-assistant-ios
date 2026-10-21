@@ -9,13 +9,15 @@ extension KhalaShellModel {
     /// page keeps its own toolbar (then `dashboardHeader` is drawn).
     var pageHeader: KhalaPageHeader? {
         guard destination == .dashboards else { return nil }
-        return KhalaPageHeader(
+        let fresh = KhalaPageHeader(
             path: frontendPath,
             state: frontendState,
             isMoreInfoOpen: isMoreInfoOpen,
             settingsEntryPath: settingsEntryPath,
             fallbackTitle: KhalaText.serverSettings
         )
+        guard let pageTabHold else { return fresh }
+        return pageTabHold.header(fresh: fresh, now: Current.date())
     }
 
     /// The drawer's Settings row is lit on the Settings screen and on Home Assistant's settings pages.
@@ -36,6 +38,7 @@ extension KhalaShellModel {
 
     /// The page header's Back.
     func goBackFromPage() {
+        pageTabHold = nil
         guard let header = pageHeader else {
             goBackInFrontend()
             return
@@ -74,6 +77,13 @@ extension KhalaShellModel {
     /// Opens one of the lifted page's tabs through the page's own tab link (it replaces the history entry, as
     /// the frontend's tabs do), else by navigating there.
     func openPageTab(_ tab: KhalaPageTab) {
+        // Keep the chrome (and the tab bar, whose lens is moving to this tab) up while the frontend swaps pages.
+        let hold = KhalaPageTabHold(header: pageHeader, selecting: tab.path, now: Current.date())
+        pageTabHold = hold
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64((KhalaPageTabHold.duration + 0.1) * 1_000_000_000))
+            if let self, pageTabHold == hold { pageTabHold = nil }
+        }
         webViewController?.evaluateJavaScript(KhalaFrontendScript.tabCall(path: tab.path)) { [weak self] result, _ in
             guard result as? Bool != true else { return }
             Task { @MainActor in self?.webViewController?.openSidebarPath(tab.path) }

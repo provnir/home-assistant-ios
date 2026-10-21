@@ -14,8 +14,32 @@ struct KhalaScreenActions {
     @MainActor
     @discardableResult
     func perform(_ call: KhalaServiceCall) async -> Bool {
+        let ok = await send(call)
+        let feedback = UINotificationFeedbackGenerator()
+        feedback.notificationOccurred(ok ? .success : .error)
+        return ok
+    }
+
+    /// Throttled per device across every screen (`KhalaRefreshThrottle`).
+    @MainActor private static var refreshThrottle = KhalaRefreshThrottle()
+
+    /// Asks Home Assistant to poll a device's entities again (`KhalaEntityRefresh`): one quiet
+    /// `homeassistant.update_entity` call, at most once per `interval` for `deviceKey`. False when throttled,
+    /// when there is nothing to name, or when Home Assistant refused.
+    @MainActor
+    func refresh(deviceKey: String, members: [KhalaEntity], interval: TimeInterval) async -> Bool {
+        let entityIds = KhalaEntityRefresh.entityIds(of: members)
+        guard !entityIds.isEmpty else { return false }
+        let key = server.identifier.rawValue + "|" + deviceKey
+        guard Self.refreshThrottle.shouldRefresh(key, now: Current.date(), interval: interval) else { return false }
+        return await send(.updateEntities(entityIds))
+    }
+
+    /// Sends a `call_service`; true when Home Assistant accepted it. Failures are logged.
+    @MainActor
+    private func send(_ call: KhalaServiceCall) async -> Bool {
         guard let api = Current.api(for: server) else { return false }
-        let ok: Bool = await withCheckedContinuation { continuation in
+        return await withCheckedContinuation { continuation in
             api.connection.send(.init(
                 type: .webSocket("call_service"),
                 data: ["domain": call.domain, "service": call.service, "service_data": call.data]
@@ -29,9 +53,6 @@ struct KhalaScreenActions {
                 }
             }
         }
-        let feedback = UINotificationFeedbackGenerator()
-        feedback.notificationOccurred(ok ? .success : .error)
-        return ok
     }
 
     /// Recorded states of `entityIds` since `start`, with attributes (event types), every change included.

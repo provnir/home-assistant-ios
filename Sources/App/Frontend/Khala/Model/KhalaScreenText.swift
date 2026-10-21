@@ -84,6 +84,25 @@ enum KhalaScreenText {
 
     static func limit(_ text: String) -> String { "Limit \(text)" }
 
+    static let updating = "Updating…"
+    static let share = "Share"
+    static let goLive = "Go live"
+
+    /// "3 of 12"
+    static func position(_ index: Int, of count: Int) -> String { "\(index) of \(count)" }
+
+    /// "Updated just now", "Updated 4 min ago", "Updated 3 h ago", "Updated 2 d ago": when a device's data last
+    /// arrived (`KhalaEntityRefresh.lastUpdated`).
+    static func updated(_ date: Date, now: Date) -> String {
+        let seconds = max(0, now.timeIntervalSince(date))
+        switch seconds {
+        case ..<60: return "Updated just now"
+        case ..<3600: return "Updated \(Int(seconds / 60)) min ago"
+        case ..<86400: return "Updated \(Int(seconds / 3600)) h ago"
+        default: return "Updated \(Int(seconds / 86400)) d ago"
+        }
+    }
+
     static func heatNow(minutes: Int?) -> String {
         guard let minutes else { return heatNow }
         return "\(heatNow) · \(minutes) min"

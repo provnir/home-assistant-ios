@@ -104,6 +104,7 @@ enum KhalaFrontendScript {
           const PAGE_ATTRIBUTE = "khala-page-chrome";
           const TABS_ATTRIBUTE = "khala-page-tabs";
           const FAB_ATTRIBUTE = "khala-page-fab";
+          const TABLE_ATTRIBUTE = "khala-page-table";
 
           const post = (message) => {
             try { window.webkit.messageHandlers[HANDLER].postMessage(message); } catch (e) {}
@@ -379,8 +380,15 @@ enum KhalaFrontendScript {
               :host([${PAGE_ATTRIBUTE}]) .toolbar-content,
               :host([${PAGE_ATTRIBUTE}]) #tabbar { display: none !important; }
               :host([${PAGE_ATTRIBUTE}]) .container { height: calc(100% - var(--safe-area-inset-top, 0px)) !important; }
-              :host([${PAGE_ATTRIBUTE}][${TABS_ATTRIBUTE}]) .content {
-                margin-bottom: calc(var(--safe-area-inset-bottom, 0px) + ${TAB_BAR}px) !important;
+              /* The page scrolls on under the floating glass tabs (no band reserved below the content, which
+                 read as a full-width footer): the frontend's bottom-tab margin goes, and the last rows get room
+                 to scroll clear of the bar instead. A data table scrolls itself: its bottom empty row grows. */
+              :host([${PAGE_ATTRIBUTE}][${TABS_ATTRIBUTE}]) .content { margin-bottom: 0 !important; }
+              :host([${PAGE_ATTRIBUTE}][${TABS_ATTRIBUTE}]:not([${TABLE_ATTRIBUTE}])) .content::after {
+                content: ""; display: block; height: calc(var(--safe-area-inset-bottom, 0px) + ${TAB_BAR}px);
+              }
+              :host([${PAGE_ATTRIBUTE}][${TABS_ATTRIBUTE}]) ::slotted(ha-data-table) {
+                --data-table-empty-row-height: calc(var(--safe-area-inset-bottom, 0px) + ${TAB_BAR}px) !important;
               }
               :host([${FAB_ATTRIBUTE}]) #fab { display: none !important; }
             `,
@@ -662,7 +670,7 @@ enum KhalaFrontendScript {
           };
 
           const unliftPage = (element) => {
-            [PAGE_ATTRIBUTE, TABS_ATTRIBUTE, FAB_ATTRIBUTE].forEach((name) => element.removeAttribute(name));
+            [PAGE_ATTRIBUTE, TABS_ATTRIBUTE, FAB_ATTRIBUTE, TABLE_ATTRIBUTE].forEach((name) => element.removeAttribute(name));
           };
           const failPage = (element, why) => {
             element.__khalaPageFailed = true;
@@ -687,6 +695,8 @@ enum KhalaFrontendScript {
             setAttribute(element, PAGE_ATTRIBUTE, true);
             setAttribute(element, TABS_ATTRIBUTE, page.tabs.length > 1);
             setAttribute(element, FAB_ATTRIBUTE, read.hasPrimary);
+            const outer = element.getRootNode() && element.getRootNode().host;
+            setAttribute(element, TABLE_ATTRIBUTE, Boolean(outer && outer.localName === "hass-tabs-subpage-data-table"));
             insetPx = INSET + (dialogOpen ? 0 : TITLE_BLOCK + (page.search ? SEARCH_BLOCK : 0));
             ensureInset();
             const shadow = element.shadowRoot;

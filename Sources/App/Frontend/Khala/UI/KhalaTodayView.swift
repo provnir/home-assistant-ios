@@ -20,6 +20,12 @@ struct KhalaTodayView: View {
         return formatter
     }()
 
+    /// The capture a detection card shows: its camera's, at its time.
+    static func captureRef(_ item: KhalaTimelineItem) -> KhalaCaptureRef? {
+        guard case let .detection(_, cameraEntityId) = item.kind, let cameraEntityId else { return nil }
+        return KhalaCaptureRef(cameraEntityId: cameraEntityId, date: item.date)
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             ScrollView {
@@ -79,7 +85,12 @@ struct KhalaTodayView: View {
                                 lineAbove: lineAbove,
                                 lineBelow: lineBelow
                             ) {
-                                KhalaEventCard(title: item.title, subtitle: item.subtitle, category: item.category) {
+                                KhalaEventCard(
+                                    title: item.title,
+                                    subtitle: item.subtitle,
+                                    category: item.category,
+                                    capture: Self.captureRef(item)
+                                ) {
                                     onItem(item)
                                 }
                             }

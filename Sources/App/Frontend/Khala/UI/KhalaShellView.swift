@@ -157,6 +157,17 @@ struct KhalaShellView: View {
                 }
             }
         }
+        // Detection captures: the cards' thumbnails and the full-screen still viewer.
+        .environment(\.khalaCaptures, shell.captures)
+        .fullScreenCover(item: $shell.captureViewer) { request in
+            KhalaCaptureViewer(
+                request: request,
+                source: shell.captures,
+                calendar: home.calendar,
+                onClose: { shell.captureViewer = nil },
+                onLive: { shell.goLive(from: request) }
+            )
+        }
         .sheet(isPresented: $showsDeviceSettings) {
             KhalaDeviceSettingsView(
                 serverId: server.identifier.rawValue,
@@ -395,7 +406,12 @@ struct KhalaShellView: View {
     private func handle(_ item: KhalaTimelineItem) {
         switch item.kind {
         case let .detection(eventEntityId, cameraEntityId):
-            route(entityId: cameraEntityId ?? eventEntityId)
+            // The still the home saved for the detection; its camera's screen when there is none.
+            guard let cameraEntityId else { return route(entityId: eventEntityId) }
+            let name = home.live.entitiesById[cameraEntityId]?.name ?? cameraEntityId
+            shell.openCapture(cameraEntityId: cameraEntityId, cameraName: name, date: item.date) {
+                route(entityId: cameraEntityId)
+            }
         case .scheduled, .timestamp:
             if let target = item.targetEntityId {
                 route(entityId: target)

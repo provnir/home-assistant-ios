@@ -17,6 +17,18 @@ struct KhalaServiceCall {
         self.data = merged
     }
 
+    /// A call over several entities (`entity_id` as a list).
+    init(_ domain: String, _ service: String, entityIds: [String]) {
+        self.domain = domain
+        self.service = service
+        self.data = ["entity_id": entityIds]
+    }
+
+    /// `homeassistant.update_entity` for `entityIds`: Home Assistant polls them again (`KhalaEntityRefresh`).
+    static func updateEntities(_ entityIds: [String]) -> KhalaServiceCall {
+        KhalaServiceCall("homeassistant", "update_entity", entityIds: entityIds)
+    }
+
     /// "switch.turn_on", for logs and tests.
     var name: String { "\(domain).\(service)" }
 

@@ -31,7 +31,7 @@ struct KhalaPageHeader: Equatable {
     let showsTitle: Bool
     let search: KhalaPageSearch?
     /// Two or more, else none (one tab is just the page).
-    let tabs: [KhalaPageTab]
+    private(set) var tabs: [KhalaPageTab]
     let primary: KhalaFrontendAction?
     /// The toolbar's other tools for the "More" menu, in sections: each of the frontend's menus is one (their
     /// trigger is a generic "Menu" button, so its title is dropped), and buttons next to each other share one.
@@ -108,5 +108,12 @@ struct KhalaPageHeader: Equatable {
     /// The tab on screen, for the sub-tab bar's selection.
     var activeTabIndex: Int {
         tabs.firstIndex(where: \.isActive) ?? 0
+    }
+
+    /// The same header with the tab at `path` active (the one just chosen, before the frontend reports it).
+    func selectingTab(path: String) -> KhalaPageHeader {
+        var copy = self
+        copy.tabs = tabs.map { KhalaPageTab(path: $0.path, title: $0.title, isActive: $0.path == path) }
+        return copy
     }
 }

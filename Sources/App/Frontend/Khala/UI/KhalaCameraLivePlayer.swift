@@ -5,14 +5,22 @@ import SwiftUI
 /// (`WebRTCVideoPlayerView`, `CameraStreamHLSView`, `CameraMJPEGPlayerView`), chosen and fallen back between exactly
 /// as it does — `CameraCapabilities.fetch` → `CameraStreamPlan.players(for:)` → `CameraPlayerPlayback`. Only the
 /// full-screen chrome (navigation bar, picker, close button) is left out; the card supplies its own.
+///
+/// The latest still (`poster`, the camera's cached `camera_proxy` frame) shows at once and stays over the player
+/// until the stream is up, so the card is never a black box while WebRTC negotiates (build 19.1: "very laggy").
 struct KhalaCameraLivePlayer: View {
     let server: Server
     let cameraEntityId: String
     let cameraName: String?
+    /// The still shown until the stream is up.
+    var poster: (() async -> UIImage?)?
+    /// Told which player is on (nil while none).
+    var onPlayer: ((CameraPlayerType?) -> Void)?
 
     @State private var playback = CameraPlayerPlayback()
     @State private var controlsVisible = true
     @State private var showLoader = true
+    @State private var posterImage: UIImage?
 
     var body: some View {
         ZStack {
@@ -51,6 +59,13 @@ struct KhalaCameraLivePlayer: View {
             .id(cameraEntityId)
 
             if playback.isLoaderVisible(webRTCIsLoading: showLoader) {
+                if let posterImage {
+                    Image(uiImage: posterImage)
+                        .resizable()
+                        .scaledToFill()
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
                 ProgressView()
                     .progressViewStyle(.circular)
                     .tint(.white)
@@ -59,6 +74,13 @@ struct KhalaCameraLivePlayer: View {
         // The players hide the status bar for their full-screen home; inside a card the screen keeps it.
         .statusBarHidden(false)
         .persistentSystemOverlays(.automatic)
+        .clipped()
+        .animation(.easeOut(duration: 0.25), value: playback.isLoaderVisible(webRTCIsLoading: showLoader))
+        .onChange(of: playback.current) { onPlayer?($0) }
+        .task(id: cameraEntityId) {
+            posterImage = nil
+            posterImage = await poster?()
+        }
         .task(id: cameraEntityId) {
             showLoader = true
             playback.clear()

@@ -74,6 +74,12 @@ final class KhalaShellModel: ObservableObject {
     /// redirect; Back there returns to Settings. Nil once the web UI is used for something else.
     @Published var settingsEntryPath: String?
     /// The path Settings asked for, and until when a redirect below it still counts as its landing.
+    /// Detection captures (stills saved by the home's automations), for cards and the viewer.
+    let captures: KhalaMediaSourceCaptures
+    /// The full-screen capture viewer, when one is open.
+    @Published var captureViewer: KhalaCaptureViewerRequest?
+    /// The page chrome held on screen while a chosen tab's page loads (`KhalaPageTabHold`).
+    @Published var pageTabHold: KhalaPageTabHold?
     var settingsRequestedPath: String?
     var settingsLandingDeadline: Date?
     private var settingsRequest: AnyCancellable?
@@ -95,6 +101,7 @@ final class KhalaShellModel: ObservableObject {
         self.server = server
         self.destination = startsOnDashboards ? .dashboards : .today
         self.settings = KhalaSettingsModel(server: server)
+        self.captures = KhalaMediaSourceCaptures(server: server)
         // `sidebar/show` from the frontend lands here because the app answers `hasSidebar` while the shell is
         // on (`KhalaShell.isEnabled`); see `WebViewExternalMessageHandler`'s `.sidebarShow`.
         frontendMenuRequest = NativeTabBarState.shared.moreRequests

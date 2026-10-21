@@ -19,4 +19,24 @@ extension KhalaShellModel {
         isMenuOpen = false
         destination = newDestination
     }
+
+    /// Opens the full-screen still of a detection (`KhalaCaptureViewer`); `fallback` runs when the home saved no
+    /// capture for it.
+    func openCapture(cameraEntityId: String, cameraName: String, date: Date, fallback: @escaping () -> Void) {
+        Task { @MainActor in
+            guard let capture = await captures.capture(cameraEntityId: cameraEntityId, near: date) else {
+                fallback()
+                return
+            }
+            captureViewer = KhalaCaptureViewerRequest(
+                cameraEntityId: cameraEntityId, cameraName: cameraName, capture: capture
+            )
+        }
+    }
+
+    /// "Go live" in the capture viewer: the camera's screen, on its live view.
+    func goLive(from request: KhalaCaptureViewerRequest) {
+        captureViewer = nil
+        show(.camera(entityId: request.cameraEntityId))
+    }
 }

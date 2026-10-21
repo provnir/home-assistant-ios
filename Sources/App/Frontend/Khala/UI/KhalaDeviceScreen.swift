@@ -14,6 +14,12 @@ struct KhalaDeviceScreen<Title: View, Trailing: View, Content: View>: View {
     @ViewBuilder let title: () -> Title
     @ViewBuilder let trailing: () -> Trailing
     @ViewBuilder let content: () -> Content
+    /// Pull to refresh, for screens whose data can be asked for again (the car's).
+    var onRefresh: (() async -> Void)?
+
+    /// The section shown before the current one: the new section slides in from its side.
+    @State private var lastSelection = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -28,15 +34,19 @@ struct KhalaDeviceScreen<Title: View, Trailing: View, Content: View>: View {
                             .lineLimit(2)
                             .padding(.top, 1)
                     }
-                    // Sections cross-fade (and settle a few points) as the bar's lens moves; the bar animates
-                    // the change (`KhalaSubTabBar.motion`).
-                    content()
-                        .id(selection)
-                        .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .offset(y: 10)),
-                            removal: .opacity
-                        ))
-                        .padding(.top, 20)
+                    // Sections cross-fade and slide in from the side of the tab chosen, with the bar's lens
+                    // (`KhalaSubTabBar.motion`); the old and the new section overlap while they do, so the new one
+                    // doesn't start below the old.
+                    ZStack(alignment: .topLeading) {
+                        content()
+                            .id(selection)
+                            .transition(.asymmetric(
+                                insertion: .opacity.combined(with: .offset(x: selection >= lastSelection ? 28 : -28)),
+                                removal: .opacity
+                            ))
+                    }
+                    .animation(KhalaSubTabBar.motion(reduceMotion: reduceMotion), value: selection)
+                    .padding(.top, 20)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, KhalaTheme.gutter)
@@ -44,6 +54,7 @@ struct KhalaDeviceScreen<Title: View, Trailing: View, Content: View>: View {
                 .padding(.bottom, tabs.isEmpty ? 32 : 62 + 8 + 32)
             }
             .scrollIndicators(.hidden)
+            .modifier(KhalaRefreshable(action: onRefresh))
 
             HStack(spacing: 8) {
                 // The shell's menu button occupies the first 44 pt slot, the only leading control.
@@ -58,6 +69,23 @@ struct KhalaDeviceScreen<Title: View, Trailing: View, Content: View>: View {
                 KhalaSubTabBar(tabs: tabs, selection: $selection, category: category)
                     .frame(maxHeight: .infinity, alignment: .bottom)
             }
+        }
+        .onAppear { lastSelection = selection }
+        // After the frame that changed it, so that frame still slides in from the old section's side.
+        .onChange(of: selection) { lastSelection = $0 }
+    }
+}
+
+/// Pull to refresh when the screen has something to refresh; nothing (no spinner) otherwise.
+private struct KhalaRefreshable: ViewModifier {
+    let action: (() async -> Void)?
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if let action {
+            content.refreshable { await action() }
+        } else {
+            content
         }
     }
 }

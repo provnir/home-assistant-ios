@@ -23,7 +23,10 @@ struct KhalaDetailScreen: View {
                 calendar: home.calendar,
                 onSelectCamera: { shell.show(.camera(entityId: $0)) },
                 onAllCameras: { shell.show(.cameras) },
-                onFullScreen: { entityId, name in shell.openCamera(entityId: entityId, name: name) }
+                onFullScreen: { entityId, name in shell.openCamera(entityId: entityId, name: name) },
+                onCapture: { camera, date in
+                    shell.openCapture(cameraEntityId: camera.entityId, cameraName: camera.name, date: date) {}
+                }
             )
             .id(entityId)
         case let .device(id):
