@@ -1,4 +1,5 @@
 import HAKit
+import os
 import Shared
 import SwiftUI
 import WebKit
@@ -103,7 +104,14 @@ struct KhalaWebKitLivePlayer: View {
 }
 
 /// Holds the web view and runs `KhalaWebRTCSignaling`'s effects. Main-thread confined: every callback from HAKit,
-/// the page or a timer comes back through `post(_:)`.
+/// the page or a timer comes back through `post(_:)`, and one that arrives on another thread is moved to main
+/// rather than trapping.
+///
+/// Teardown is idempotent (`invalidate()`, also run by `deinit`): once invalidated nothing reaches the signaling,
+/// the page, HAKit or the host again. Build 30.1 crashed right after giving way to HLS; the hand-off is now
+/// sequenced — page stopped (peer connection closed, media released) and the WebKit callback stack left — before
+/// the host is told, and every late callback (script message, evaluate completion, navigation delegate, timer,
+/// HAKit) is dropped by the invalidated flag or by the attempt numbers.
 final class KhalaWebKitLiveSession: NSObject, ObservableObject {
     @Published private(set) var showLoader = true
     @Published private(set) var didFail = false
@@ -112,13 +120,22 @@ final class KhalaWebKitLiveSession: NSObject, ObservableObject {
 
     let webView: WKWebView
 
+    private static let log = os.Logger(subsystem: "il.co.provizor.khala", category: "live")
+
     private let server: Server
     private let cameraEntityId: String
+    private let scriptHandler: KhalaWeakScriptHandler
     private var signaling = KhalaWebRTCSignaling()
     private var gate: WebRTCServerConnectionGate?
     private var offerSubscription: HACancellable?
     private var socketObserver: NSObjectProtocol?
     private var deadlines: [DispatchWorkItem] = []
+    /// Events that arrived while the effects of another were being performed (an evaluate completion WebKit
+    /// calls synchronously, say): handled after it, never inside it.
+    private var pendingEvents: [KhalaWebRTCSignaling.Event] = []
+    private var isHandling = false
+    private var isInvalidated = false
+    private var isHandingOff = false
 
     init(server: Server, cameraEntityId: String, fit: KhalaWebRTCPage.Fit) {
         self.server = server
@@ -132,6 +149,7 @@ final class KhalaWebKitLiveSession: NSObject, ObservableObject {
         configuration.websiteDataStore = .nonPersistent()
         let handler = KhalaWeakScriptHandler()
         configuration.userContentController.add(handler, name: KhalaWebRTCPage.messageHandler)
+        self.scriptHandler = handler
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.isOpaque = false
@@ -159,15 +177,23 @@ final class KhalaWebKitLiveSession: NSObject, ObservableObject {
             NotificationCenter.default.removeObserver(socketObserver)
         }
         let webView = webView
-        DispatchQueue.main.async {
-            webView.configuration.userContentController.removeScriptMessageHandler(
-                forName: KhalaWebRTCPage.messageHandler
-            )
-            webView.stopLoading()
+        let handler = scriptHandler
+        let alreadyReleased = isInvalidated
+        // WebKit wants its objects on the main thread; the last release of a session normally is, but a late
+        // HAKit or timer callback can briefly hold it elsewhere.
+        if Thread.isMainThread {
+            handler.target = nil
+            if !alreadyReleased { KhalaWebKitLiveSession.releasePage(of: webView) }
+        } else {
+            DispatchQueue.main.async {
+                handler.target = nil
+                if !alreadyReleased { KhalaWebKitLiveSession.releasePage(of: webView) }
+            }
         }
     }
 
     func start() {
+        guard !isInvalidated else { return }
         didFail = false
         showLoader = true
         send(.start)
@@ -186,16 +212,62 @@ final class KhalaWebKitLiveSession: NSObject, ObservableObject {
     }
 
     func toggleMute() {
+        guard !isInvalidated else { return }
         isMuted.toggle()
         evaluate(.setMuted(isMuted))
+    }
+
+    /// Everything the session holds, released once: timers, the gate, the server subscription (closing the
+    /// session on the server), the socket observer, the script handler, the navigation delegate and the page's
+    /// peer connection and media. Safe to call any number of times.
+    func invalidate() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in self?.invalidate() }
+            return
+        }
+        guard !isInvalidated else { return }
+        isInvalidated = true
+        pendingEvents.removeAll()
+        deadlines.forEach { $0.cancel() }
+        deadlines.removeAll()
+        gate?.cancel()
+        gate = nil
+        offerSubscription?.cancel()
+        offerSubscription = nil
+        if let socketObserver {
+            NotificationCenter.default.removeObserver(socketObserver)
+            self.socketObserver = nil
+        }
+        scriptHandler.target = nil
+        Self.releasePage(of: webView)
+    }
+
+    /// Stops the page's stream and detaches the web view from us. Never touches the session, so `deinit` can use it.
+    private static func releasePage(of webView: WKWebView) {
+        webView.navigationDelegate = nil
+        webView.configuration.userContentController.removeScriptMessageHandler(forName: KhalaWebRTCPage.messageHandler)
+        webView.evaluateJavaScript("window.khala && window.khala.stop(); true", completionHandler: nil)
+        webView.stopLoading()
     }
 
     // MARK: - Signaling
 
     private func send(_ event: KhalaWebRTCSignaling.Event) {
-        dispatchPrecondition(condition: .onQueue(.main))
-        for effect in signaling.handle(event) {
-            perform(effect)
+        guard Thread.isMainThread else {
+            post(event)
+            return
+        }
+        guard !isInvalidated else { return }
+        pendingEvents.append(event)
+        guard !isHandling else { return }
+        isHandling = true
+        defer { isHandling = false }
+        while !pendingEvents.isEmpty, !isInvalidated {
+            let next = pendingEvents.removeFirst()
+            for effect in signaling.handle(next) {
+                guard !isInvalidated else { break }
+                perform(effect)
+            }
         }
     }
 
@@ -216,12 +288,14 @@ final class KhalaWebKitLiveSession: NSObject, ObservableObject {
             }
             observeSocket(api.connection)
             let gate = WebRTCServerConnectionGate(connection: api.connection)
+            self.gate?.cancel()
             self.gate = gate
             gate.whenReady(requiringFreshConnection: freshConnection) { [weak self] isReady in
                 self?.post(isReady ? .serverReady(attempt: attempt) : .serverUnusable(attempt: attempt))
             }
 
         case let .fetchClientConfig(attempt):
+            gate?.cancel()
             gate = nil
             guard let api = Current.api(for: server) else {
                 post(.serverUnusable(attempt: attempt))
@@ -242,6 +316,7 @@ final class KhalaWebKitLiveSession: NSObject, ObservableObject {
                     if KhalaLiveFailure.isUnsupported(message: Self.message(of: error)) {
                         self?.post(.clientConfigUnsupported(attempt: attempt))
                     } else {
+                        Self.log.info("client config failed, using default ICE servers")
                         self?.post(.clientConfig(attempt: attempt, nil))
                     }
                 }
@@ -305,26 +380,57 @@ final class KhalaWebKitLiveSession: NSObject, ObservableObject {
             deadlines.removeAll()
 
         case .playing:
+            Self.log.info("\(self.cameraEntityId, privacy: .public): first frame")
             showLoader = false
         case let .codec(name):
             codec = name
 
         case let .fallBack(failure):
-            // The kind only: a server message can quote stream URLs, and nothing here may log a credential.
-            Current.Log.info("Khala live: \(cameraEntityId) WebKit WebRTC gave way (\(Self.kind(of: failure)))")
-            codec = nil
-            didFail = true
+            handOff(failure)
         }
     }
 
+    /// Gives way to the next player. The signaling has already queued the page's stop and the unsubscribe; the
+    /// host is told only once that stop has run in the page (its completion, or half a second at most) and on a
+    /// fresh turn of the main queue, so HLS's AVPlayer and audio session are never set up while WebKit is still
+    /// tearing its peer connection down, and never from inside a WebKit callback.
+    private func handOff(_ failure: KhalaLiveFailure) {
+        guard !isHandingOff else { return }
+        isHandingOff = true
+        let reason = failure.logDescription
+        Self.log.error("\(self.cameraEntityId, privacy: .public): WebKit WebRTC gave way: \(reason, privacy: .public)")
+        Current.Log.info("Khala live: \(cameraEntityId) WebKit WebRTC gave way (\(reason))")
+        KhalaLiveEngineStore.memory.record(failure, cameraEntityId: cameraEntityId)
+        codec = nil
+
+        var told = false
+        let tell: () -> Void = { [weak self] in
+            guard !told else { return }
+            told = true
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.invalidate()
+                self.didFail = true
+            }
+        }
+        webView.evaluateJavaScript("true") { _, _ in tell() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { tell() }
+    }
+
     private func evaluate(_ command: KhalaWebRTCPageCommand) {
+        guard !isInvalidated else { return }
         webView.evaluateJavaScript(command.javaScript) { [weak self] _, error in
-            guard let error, let self else { return }
+            guard let error, let self, !self.isInvalidated else { return }
             // A call that returns nothing WebKit can bridge is not a failure.
             if let webKitError = error as? WKError, webKitError.code == .javaScriptResultTypeIsUnsupported { return }
+            let code = (error as NSError).code
+            guard command.isEssential else {
+                Self.log.info("\(self.cameraEntityId, privacy: .public): page call failed (\(code)), ignored")
+                return
+            }
             // `window.khala` missing means the page is not there; anything else threw inside it. The signaling
             // ignores this once the stream is stopped or has already given way.
-            send(.page(.error(message: "evaluate failed")))
+            send(.page(.error(message: "evaluate failed (\(code))")))
         }
     }
 
@@ -339,7 +445,7 @@ final class KhalaWebKitLiveSession: NSObject, ObservableObject {
     /// Core closes a session with the socket that opened it, and HAKit would resubscribe the old offer once the
     /// socket returns, so a lost socket rebuilds the attempt on the fresh one (`KhalaWebRTCSignaling.socketLost`).
     private func observeSocket(_ connection: HAConnection) {
-        guard socketObserver == nil else { return }
+        guard socketObserver == nil, !isInvalidated else { return }
         socketObserver = NotificationCenter.default.addObserver(
             forName: HAConnectionState.didTransitionToStateNotification,
             object: connection,
@@ -352,7 +458,20 @@ final class KhalaWebKitLiveSession: NSObject, ObservableObject {
     }
 
     fileprivate func receive(_ body: Any) {
-        guard let message = KhalaWebRTCPageMessage(body: body) else { return }
+        guard !isInvalidated, let message = KhalaWebRTCPageMessage(body: body) else { return }
+        let camera = cameraEntityId
+        switch message {
+        case let .note(text):
+            let note = KhalaLiveFailure.redacted(text)
+            Self.log.info("\(camera, privacy: .public): page: \(note, privacy: .public)")
+        case let .ice(state):
+            Self.log.info("\(camera, privacy: .public): ICE \(state, privacy: .public)")
+        case let .error(text):
+            let error = KhalaLiveFailure.redacted(text)
+            Self.log.error("\(camera, privacy: .public): page error: \(error, privacy: .public)")
+        default:
+            break
+        }
         send(.page(message))
     }
 
@@ -362,16 +481,26 @@ final class KhalaWebKitLiveSession: NSObject, ObservableObject {
         }
         return error.localizedDescription
     }
+}
 
-    private static func kind(of failure: KhalaLiveFailure) -> String {
-        switch failure {
-        case .unsupported: return "no WebRTC for this camera"
-        case .noServer: return "server unreachable"
-        case .signaling: return "signaling error"
-        case .timeout: return "no frame in time"
-        case .ice: return "ICE failed"
-        case .page: return "page error"
+/// The app session's live-engine state: the hidden setting (`KhalaLiveEngine`, App settings → General → Khala)
+/// and the per-camera fallback memory. Main thread only.
+enum KhalaLiveEngineStore {
+    static var memory = KhalaLiveFallbackMemory()
+
+    static var engine: KhalaLiveEngine {
+        get { KhalaLiveEngine(stored: UserDefaults.standard.string(forKey: KhalaLiveEngine.defaultsKey)) }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: KhalaLiveEngine.defaultsKey) }
+    }
+
+    /// The camera's player plan with the engine setting and the memory applied (both hosts use it).
+    static func plan(_ players: [CameraPlayerType], cameraEntityId: String) -> [CameraPlayerType] {
+        let skips = memory.skipsWebKit(cameraEntityId: cameraEntityId)
+        let planned = engine.plan(players, webRTC: .webRTC, webKitFailedRepeatedly: skips)
+        if planned != players {
+            Current.Log.info("Khala live: \(cameraEntityId) skips WebKit WebRTC (engine \(engine.rawValue))")
         }
+        return planned
     }
 }
 
@@ -393,10 +522,14 @@ extension KhalaWebKitLiveSession: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
         send(.page(.error(message: "page failed to load")))
     }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        send(.page(.error(message: "page failed to load")))
+    }
 }
 
 /// `WKUserContentController` holds its handlers strongly; this keeps it from holding the session.
-private final class KhalaWeakScriptHandler: NSObject, WKScriptMessageHandler {
+final class KhalaWeakScriptHandler: NSObject, WKScriptMessageHandler {
     weak var target: KhalaWebKitLiveSession?
 
     func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -420,4 +553,11 @@ private struct KhalaWebKitLiveView: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: UIView, context: Context) {}
+
+    /// The container goes; the web view is the session's and leaves with it (only if it is still ours).
+    static func dismantleUIView(_ uiView: UIView, coordinator: ()) {
+        for subview in uiView.subviews {
+            subview.removeFromSuperview()
+        }
+    }
 }

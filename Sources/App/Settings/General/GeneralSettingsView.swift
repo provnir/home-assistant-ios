@@ -50,9 +50,51 @@ struct GeneralSettingsView: View {
             }
 
             EnhancedWebSecuritySettingsRow(viewModel: .init())
+
+            if KhalaShell.isEnabled {
+                khalaLiveEngine
+            }
         }
         .id(redrawHelper)
         .listTopContentMargin()
+    }
+
+    /// Khala, for testing only (not in the settings search): which engine a camera's live view starts on, and
+    /// the last time WebKit WebRTC gave way, with its reason.
+    @ViewBuilder
+    private var khalaLiveEngine: some View {
+        Section {
+            Picker("Live engine", selection: .init(get: {
+                KhalaLiveEngineStore.engine
+            }, set: { newValue in
+                KhalaLiveEngineStore.engine = newValue
+                redrawView()
+            })) {
+                ForEach(KhalaLiveEngine.allCases, id: \.self) { engine in
+                    Text(engine.title).tag(engine)
+                }
+            }
+            if let last = KhalaLiveEngineStore.memory.lastFallback {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Last WebKit fallback")
+                    Text(last)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                Button("Forget WebKit failures") {
+                    KhalaLiveEngineStore.memory.reset()
+                    redrawView()
+                }
+            }
+        } header: {
+            Text("Khala")
+        } footer: {
+            Text(
+                "Auto: WebKit WebRTC first, then HLS; a camera where WebKit failed twice goes straight to HLS "
+                    + "until the app restarts. WebKit: always WebRTC first. HLS: never WebRTC."
+            )
+        }
     }
 
     @ViewBuilder

@@ -97,7 +97,11 @@ struct KhalaCameraLivePlayer: View {
             let entityId = cameraEntityId
             let capabilities = await CameraCapabilities.fetch(server: server, cameraEntityId: entityId)
             guard entityId == cameraEntityId else { return }
-            playback.start(with: CameraStreamPlan.players(for: capabilities))
+            // The hidden Live engine setting and this app session's WebKit failures may drop WebRTC here.
+            playback.start(with: KhalaLiveEngineStore.plan(
+                CameraStreamPlan.players(for: capabilities),
+                cameraEntityId: entityId
+            ))
         }
     }
 

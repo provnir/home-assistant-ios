@@ -11,8 +11,8 @@ import Foundation
 /// through native (`KhalaWebRTCSignaling`), which rides the app's existing websocket:
 ///
 /// - page → native, `window.webkit.messageHandlers.khala.postMessage(...)`, one of `KhalaWebRTCPageMessage`:
-///   `ready`, `offer {sdp}`, `candidate {candidate}`, `ice {state}`, `frame {width, height}`,
-///   `codec {mimeType}`, `error {message}`;
+///   `ready`, `offer {sdp}`, `candidate {candidate}`, `ice {state}`, `frame {width, height, how}`,
+///   `codec {mimeType}`, `error {message}` (fatal) and `note {message}` (logged only);
 /// - native → page, `window.khala.start(config)`, `.answer(sdp)`, `.candidate(init)`, `.setMuted(bool)`,
 ///   `.stop()` (see `KhalaWebRTCPageCommand`).
 ///
@@ -58,6 +58,8 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: {{F
   var generation = 0;
   var sawFrame = false;
   var codecTimer = null;
+  var frameTimer = null;
+  var lastTime = -1;
 
   function post(message) {
     try {
@@ -67,27 +69,35 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: {{F
     }
   }
 
-  function fail(where, error) {
+  function describe(error) {
+    var name = (error && error.name) ? String(error.name) + ": " : "";
     var text = (error && error.message) ? String(error.message) : String(error);
-    post({ type: "error", message: where + ": " + text.slice(0, 200) });
+    return (name + text).slice(0, 200);
+  }
+
+  // Fatal: native gives way to the next player.
+  function fail(where, error) {
+    post({ type: "error", message: where + ": " + describe(error) });
+  }
+
+  // Not fatal: native only logs it.
+  function note(where, error) {
+    post({ type: "note", message: where + ": " + describe(error) });
   }
 
   window.addEventListener("error", function (event) {
     fail("script", event && event.message ? event.message : "error");
   });
   window.addEventListener("unhandledrejection", function (event) {
-    fail("promise", event && event.reason ? event.reason : "rejection");
+    note("promise", event && event.reason ? event.reason : "rejection");
   });
 
   function cleanUp() {
     generation += 1;
     sawFrame = false;
+    lastTime = -1;
     if (codecTimer) { clearTimeout(codecTimer); codecTimer = null; }
-    if (stream) {
-      stream.getTracks().forEach(function (track) { track.stop(); });
-      stream = null;
-    }
-    try { video.srcObject = null; } catch (e) {}
+    if (frameTimer) { clearInterval(frameTimer); frameTimer = null; }
     if (pc) {
       pc.onnegotiationneeded = null;
       pc.onicecandidate = null;
@@ -96,16 +106,55 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: {{F
       try { pc.close(); } catch (e) {}
       pc = null;
     }
+    if (stream) {
+      stream.getTracks().forEach(function (track) { try { track.stop(); } catch (e) {} });
+      stream = null;
+    }
+    try { video.pause(); } catch (e) {}
+    try { video.srcObject = null; } catch (e) {}
   }
 
-  function reportFrame() {
-    if (sawFrame || !video.videoWidth) { return; }
+  // The first decoded frame, however WebKit shows it: the media events, the video's clock moving, a video frame
+  // callback, or the inbound stats counting decoded frames. Whichever comes first reports it, once.
+  function reportFrame(how) {
+    if (sawFrame || !pc) { return; }
     sawFrame = true;
-    post({ type: "frame", width: video.videoWidth, height: video.videoHeight });
+    if (frameTimer) { clearInterval(frameTimer); frameTimer = null; }
+    post({ type: "frame", width: video.videoWidth || 0, height: video.videoHeight || 0, how: how });
     readCodec(generation, 0);
   }
 
-  // The codec the stream actually decodes, from the inbound video RTP stats: "video/H265" and so on.
+  function onMediaEvent() {
+    if (video.videoWidth) { reportFrame("event"); }
+  }
+
+  function watchForFrames(gen) {
+    if (frameTimer) { clearInterval(frameTimer); }
+    if (typeof video.requestVideoFrameCallback === "function") {
+      try {
+        video.requestVideoFrameCallback(function () { if (gen === generation) { reportFrame("callback"); } });
+      } catch (e) {}
+    }
+    frameTimer = setInterval(function () {
+      if (gen !== generation || sawFrame || !pc) { return; }
+      var time = video.currentTime;
+      // The clock alone could be the audio track; a video size means a video frame was decoded too.
+      if (lastTime >= 0 && time > lastTime && video.videoWidth) { reportFrame("clock"); return; }
+      lastTime = time;
+      pc.getStats().then(function (stats) {
+        if (gen !== generation || sawFrame) { return; }
+        stats.forEach(function (report) {
+          if (report.type === "inbound-rtp" && (report.kind === "video" || report.mediaType === "video") &&
+              report.framesDecoded > 0) {
+            reportFrame("stats");
+          }
+        });
+      }).catch(function () {});
+    }, 250);
+  }
+
+  // The codec the stream actually decodes, from the inbound video RTP stats: "video/H265" and so on. Only for the
+  // badge, so nothing here is fatal.
   function readCodec(gen, attempt) {
     if (!pc || gen !== generation) { return; }
     pc.getStats().then(function (stats) {
@@ -124,12 +173,12 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: {{F
       } else if (attempt < 10) {
         codecTimer = setTimeout(function () { readCodec(gen, attempt + 1); }, 500);
       }
-    }).catch(function (error) { fail("stats", error); });
+    }).catch(function (error) { if (gen === generation) { note("stats", error); } });
   }
 
-  video.addEventListener("loadeddata", reportFrame);
-  video.addEventListener("playing", reportFrame);
-  video.addEventListener("resize", reportFrame);
+  video.addEventListener("loadeddata", onMediaEvent);
+  video.addEventListener("playing", onMediaEvent);
+  video.addEventListener("resize", onMediaEvent);
 
   window.khala = {
     start: function (config) {
@@ -139,13 +188,16 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: {{F
         pc = new RTCPeerConnection(config.configuration || {});
       } catch (error) {
         fail("peer connection", error);
-        return;
+        return true;
       }
       if (config.dataChannel) {
         // Some cameras (Nest) only start sending once the channel exists, as in the frontend.
-        pc.createDataChannel(config.dataChannel);
+        try { pc.createDataChannel(config.dataChannel); } catch (error) { note("data channel", error); }
       }
       stream = new MediaStream();
+      // Attached once. Setting srcObject again (one track event per audio and video) restarts the element's load,
+      // which rejects the play() still pending with AbortError — that is what made build 30.1 give way at once.
+      video.srcObject = stream;
       pc.onnegotiationneeded = function () {
         if (!pc || gen !== generation) { return; }
         var connection = pc;
@@ -170,29 +222,43 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: {{F
       pc.ontrack = function (event) {
         if (gen !== generation || !stream) { return; }
         stream.addTrack(event.track);
-        video.srcObject = stream;
+        if (event.track.kind !== "video") { return; }
+        watchForFrames(gen);
+        // Muted autoplay normally starts it by itself; a refused or interrupted play() is not a failure — the
+        // first-frame deadline decides that.
         var playing = video.play();
-        if (playing && playing.catch) { playing.catch(function (error) { fail("play", error); }); }
+        if (playing && playing.catch) {
+          playing.catch(function (error) { if (gen === generation) { note("play", error); } });
+        }
       };
       pc.addTransceiver("audio", { direction: "recvonly" });
       pc.addTransceiver("video", { direction: "recvonly" });
+      return true;
     },
     answer: function (sdp) {
-      if (!pc || pc.signalingState !== "have-local-offer") { return; }
+      if (!pc || pc.signalingState !== "have-local-offer") { return true; }
       var gen = generation;
       pc.setRemoteDescription({ type: "answer", sdp: sdp })
         .catch(function (error) { if (gen === generation) { fail("answer", error); } });
+      return true;
     },
     candidate: function (init) {
-      if (!pc) { return; }
+      if (!pc) { return true; }
       // A remote candidate that does not apply is not fatal: ICE goes on with the others.
       pc.addIceCandidate(init).catch(function () {});
+      return true;
     },
     setMuted: function (muted) {
       video.muted = !!muted;
+      if (!muted && pc) {
+        var playing = video.play();
+        if (playing && playing.catch) { playing.catch(function (error) { note("unmute", error); }); }
+      }
+      return true;
     },
     stop: function () {
       cleanUp();
+      return true;
     }
   };
 

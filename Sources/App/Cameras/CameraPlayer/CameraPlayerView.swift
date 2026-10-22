@@ -281,7 +281,11 @@ struct CameraPlayerView: View {
         // mid-fetch still lands here; a stale answer must not decide the plan for the camera now
         // on screen.
         guard entityId == cameraEntityId else { return }
-        playback.start(with: CameraStreamPlan.players(for: capabilities))
+        // Khala: the hidden Live engine setting and this app session's WebKit failures may drop WebRTC.
+        playback.start(with: KhalaLiveEngineStore.plan(
+            CameraStreamPlan.players(for: capabilities),
+            cameraEntityId: entityId
+        ))
     }
 
     private func loadMetadata() {

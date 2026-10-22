@@ -88,7 +88,10 @@ enum KhalaWebRTCPageMessage: Equatable {
     case frame(width: Int, height: Int)
     /// The inbound video codec, from `getStats()`: "video/H265".
     case codec(mimeType: String)
+    /// Fatal: the page gives up (its JavaScript threw, the offer or answer was refused).
     case error(message: String)
+    /// Not fatal, logged only: a refused `play()`, a stats read that failed.
+    case note(message: String)
 
     /// `WKScriptMessage.body`: a dictionary with a `type`.
     init?(body: Any) {
@@ -114,6 +117,8 @@ enum KhalaWebRTCPageMessage: Equatable {
             self = .codec(mimeType: mimeType)
         case "error":
             self = .error(message: json["message"] as? String ?? "")
+        case "note":
+            self = .note(message: json["message"] as? String ?? "")
         default:
             return nil
         }
@@ -129,6 +134,8 @@ enum KhalaWebRTCPageCommand: Equatable {
     case setMuted(Bool)
     case stop
 
+    /// The page's functions all return `true`, so WebKit always has a result it can bridge (an `undefined` result
+    /// comes back as an "unsupported type" error on some releases).
     var javaScript: String {
         switch self {
         case let .start(config):
@@ -141,6 +148,15 @@ enum KhalaWebRTCPageCommand: Equatable {
             return "window.khala.setMuted(\(muted ? "true" : "false"));"
         case .stop:
             return "window.khala.stop();"
+        }
+    }
+
+    /// Whether a failure to run this command means the stream cannot go on. Muting, a candidate or a stop that
+    /// does not land changes nothing that matters.
+    var isEssential: Bool {
+        switch self {
+        case .start, .answer: return true
+        case .candidate, .setMuted, .stop: return false
         }
     }
 }
@@ -190,6 +206,54 @@ enum KhalaLiveFailure: Equatable {
     /// (same test as `WebRTCViewPlayerViewModel.isWebRTCUnsupported`).
     static func isUnsupported(message: String) -> Bool {
         message.contains("does not support WebRTC") || message.contains("frontend_stream_types")
+    }
+
+    /// Whether this says something about WebKit's live path on this camera (and so counts towards skipping it,
+    /// `KhalaLiveFallbackMemory`): not a camera without WebRTC, not a server that could not be reached.
+    var countsAgainstWebKit: Bool {
+        switch self {
+        case .unsupported, .noServer: return false
+        case .signaling, .timeout, .ice, .page: return true
+        }
+    }
+
+    /// For the log and the settings row: the kind, plus the page's own message (ours, never an SDP) or the
+    /// server's message with any URL cut out (a stream source can carry credentials).
+    var logDescription: String {
+        switch self {
+        case .unsupported: return "no WebRTC for this camera"
+        case .noServer: return "server unreachable"
+        case let .signaling(message): return "signaling error" + (message.map { ": " + Self.redacted($0) } ?? "")
+        case .timeout: return "no frame in time"
+        case .ice: return "ICE failed"
+        case let .page(message): return "page error: " + Self.redacted(message)
+        }
+    }
+
+    /// `scheme://...` up to the next space becomes `<url>`; the whole is cut to 160 characters.
+    static func redacted(_ text: String) -> String {
+        var out = ""
+        var rest = Substring(text)
+        while let range = rest.range(of: "://") {
+            // Back up over the scheme letters.
+            var schemeStart = range.lowerBound
+            while schemeStart > rest.startIndex {
+                let previous = rest.index(before: schemeStart)
+                guard rest[previous].isLetter || rest[previous] == "+" || rest[previous] == "." || rest[previous] == "-"
+                else { break }
+                schemeStart = previous
+            }
+            out += rest[rest.startIndex ..< schemeStart]
+            out += "<url>"
+            rest = rest[range.upperBound...]
+            if let end = rest.firstIndex(where: { $0 == " " || $0 == "\"" || $0 == "'" || $0 == "\n" }) {
+                rest = rest[end...]
+            } else {
+                rest = ""
+            }
+        }
+        out += rest
+        return String(out.prefix(160))
     }
 }
 
@@ -308,10 +372,18 @@ struct KhalaWebRTCSignaling {
             }
 
         case .stop:
-            guard phase != .stopped else { return [] }
-            let effects = tearDown()
-            phase = .stopped
-            return effects
+            switch phase {
+            case .stopped:
+                return []
+            case .failed, .idle, .suspended:
+                // Already torn down (or never started): nothing left to close.
+                phase = .stopped
+                return []
+            default:
+                let effects = tearDown()
+                phase = .stopped
+                return effects
+            }
 
         case .backgrounded:
             guard isActive else { return [] }
@@ -431,6 +503,8 @@ struct KhalaWebRTCSignaling {
         case let .error(text):
             guard isActive else { return [] }
             return fail(.page(text))
+        case .note:
+            return []
         }
     }
 
@@ -485,6 +559,8 @@ struct KhalaWebRTCSignaling {
     }
 
     private mutating func fail(_ failure: KhalaLiveFailure) -> [Effect] {
+        // One give-up per start: the host moves on exactly once.
+        if case .failed = phase { return [] }
         let effects = tearDown()
         phase = .failed(failure)
         return effects + [.fallBack(failure)]
@@ -537,7 +613,11 @@ enum KhalaJSON {
     /// A JSON number as an Int, whether it arrived as Int, Double or NSNumber.
     static func int(_ value: Any?) -> Int? {
         if let value = value as? Int { return value }
-        if let value = value as? Double { return Int(value) }
+        if let value = value as? Double {
+            // Int(_:) traps on NaN, infinity and out-of-range values; a page can post any of them.
+            guard value.isFinite, abs(value) < 1e15 else { return nil }
+            return Int(value)
+        }
         if let value = value as? NSNumber { return value.intValue }
         return nil
     }
