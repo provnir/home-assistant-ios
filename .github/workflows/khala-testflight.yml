@@ -40,6 +40,10 @@ on:
         description: 'One-time certificate bootstrap ONLY (Ubuntu, no build): base64 of a CSR whose key stays on the VPS. Creates or finds its Apple Distribution certificate and prints the public certificate.'
         type: string
         default: ''
+      crash_logs:
+        description: 'ONLY fetch the latest TestFlight crash reports (Ubuntu, no build): prints build, OS, exception and the crashed thread; never tester identity, comments or device identifiers.'
+        type: boolean
+        default: false
 
 concurrency:
   group: khala-testflight-${{ github.ref_name }}
@@ -78,9 +82,31 @@ jobs:
           APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: python3 Configuration/Khala/khala_ship.py cert
 
+  crashes:
+    name: TestFlight crash reports (Ubuntu)
+    if: ${{ inputs.crash_logs && inputs.bootstrap_csr == '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout the release helper
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: Configuration/Khala
+      - name: Install App Store Connect client dependencies
+        run: python3 -m pip install --quiet 'pyjwt[crypto]==2.10.1'
+      - name: Print the crash essentials of the latest TestFlight crash feedback
+        # The repository is public: the helper fetches only createdDate, osVersion, uptime, build
+        # and the crash log, and prints only the exception and the crashed thread from it.
+        env:
+          APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ vars.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: python3 Configuration/Khala/khala_ship.py crashes --bundle-id "$BUNDLE_ID" --limit 5
+
   prepare:
     name: Validate Khala identity and App Store Connect (Ubuntu)
-    if: ${{ inputs.bootstrap_csr == '' }}
+    if: ${{ inputs.bootstrap_csr == '' && !inputs.crash_logs }}
     runs-on: ubuntu-latest
     timeout-minutes: 8
     outputs:

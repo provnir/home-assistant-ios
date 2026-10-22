@@ -18,6 +18,8 @@ a fork-only edit (rebases onto upstream stay conflict-free):
   cert         one-time bootstrap: create (or find) the Apple Distribution certificate for a CSR
                whose private key never leaves the VPS, and print the public certificate.
   processing   after the upload, poll App Store Connect until the build is VALID or INVALID.
+  crashes      print the essentials (build, OS, exception, crashed thread) of the latest TestFlight
+               crash feedback; never the tester's identity, comment or device identifiers.
   verify-ipa   check the exported IPA's Info.plist and embedded profile on Linux, and guard against
                App Store processing rejections the trim could cause (Siri vocabulary/intents,
                extension/watch leftovers, purpose strings) before anything is uploaded.
@@ -996,6 +998,147 @@ def processing(args):
                 "Apple emails the result.")
 
 
+# --- TestFlight crash reports (Linux) -----------------------------------------------------
+
+# Lines of a text crash report that say what crashed and nothing about who: never the incident
+# identifier, CrashReporter key, beta identifier, hardware model, paths or the tester's comment.
+_CRASH_HEADERS = ("Version:", "OS Version:", "Exception Type:", "Exception Subtype:", "Exception Codes:",
+                  "Exception Reason:", "Termination Reason:", "Termination Description:", "Triggered by Thread:",
+                  "Crashed Thread:")
+_CRASH_FRAME = re.compile(r"^\s*\d+\s+\S")
+_HOME_PATH = re.compile(r"/(?:private/)?var/(?:mobile|containers)[^\s'\"]*|/Users/[^\s'\"]*")
+
+
+def _scrub(text, limit=300):
+    """One line of crash text, with any on-device path cut to its last component."""
+    text = _HOME_PATH.sub(lambda m: ".../" + m.group(0).rstrip("/").rsplit("/", 1)[-1], text)
+    return text.rstrip()[:limit]
+
+
+def _ips_essentials(text):
+    """An .ips (JSON) report: a one-line JSON header, then the JSON body. None when it is not one."""
+    head, _, rest = text.partition("\n")
+    try:
+        header, body = json.loads(head), json.loads(rest)
+    except ValueError:
+        return None
+    lines = [f"app {header.get('app_version', '?')} ({header.get('build_version', '?')}), "
+             f"OS {header.get('os_version', '?')}"]
+    exc = body.get("exception", {})
+    if exc:
+        lines.append(f"exception {exc.get('type', '?')} {exc.get('signal', '')} codes {exc.get('codes', '')}"
+                     + (f" subtype {exc['subtype']}" if exc.get("subtype") else ""))
+    term = body.get("termination", {})
+    if term:
+        lines.append(_scrub(f"termination {term.get('namespace', '')} code {term.get('code', '')} "
+                            f"{' '.join(map(str, term.get('reasons', [])))} {term.get('indicator', '')}"))
+    for key, values in (body.get("asi") or {}).items():
+        for value in values[:4]:
+            lines.append(_scrub(f"asi {key}: {value}"))
+    images = body.get("usedImages", [])
+
+    def frames(thread_frames):
+        out = []
+        for index, frame in enumerate(thread_frames[:40]):
+            image = images[frame["imageIndex"]] if isinstance(frame.get("imageIndex"), int) and \
+                frame["imageIndex"] < len(images) else {}
+            name = image.get("name") or "?"
+            symbol = frame.get("symbol")
+            where = f"{symbol} + {frame.get('symbolLocation', 0)}" if symbol else f"+ {frame.get('imageOffset', '?')}"
+            source = f" ({Path(frame['sourceFile']).name}:{frame.get('sourceLine', '?')})" if frame.get("sourceFile") else ""
+            out.append(_scrub(f"  {index:<3} {name:<28} {where}{source}", 400))
+        return out
+
+    if body.get("lastExceptionBacktrace"):
+        lines.append("last exception backtrace:")
+        lines += frames(body["lastExceptionBacktrace"])
+    threads = body.get("threads", [])
+    faulting = body.get("faultingThread")
+    crashed = [i for i, t in enumerate(threads) if t.get("triggered")] or \
+        ([faulting] if isinstance(faulting, int) and faulting < len(threads) else [])
+    for i in crashed[:1]:
+        thread = threads[i]
+        label = " ".join(x for x in (thread.get("name"), thread.get("queue")) if x)
+        lines.append(f"thread {i} crashed{(' [' + _scrub(label, 80) + ']') if label else ''}:")
+        lines += frames(thread.get("frames", []))
+    return lines
+
+
+def _text_essentials(text):
+    """A classic text crash report: the header lines above, the application-specific information
+    block, the last exception backtrace and the crashed thread's frames."""
+    lines, block = [], None
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        if block is not None:
+            if not line.strip():
+                block = None
+                continue
+            if block == "frames" and not _CRASH_FRAME.match(line):
+                block = None
+            elif len(lines) < 120:
+                lines.append(_scrub("  " + line.strip(), 400))
+                continue
+        if line.startswith(_CRASH_HEADERS):
+            lines.append(_scrub(line))
+        elif line.startswith("Application Specific Information:"):
+            lines.append("application specific information:")
+            block = "info"
+        elif line.startswith("Last Exception Backtrace:"):
+            lines.append("last exception backtrace:")
+            block = "frames"
+        elif re.match(r"^Thread \d+( name:.*)? Crashed:", line) or re.match(r"^Thread \d+ Crashed::", line):
+            lines.append(_scrub(line, 120))
+            block = "frames"
+    return lines
+
+
+def crash_essentials(text):
+    """What crashed, from a TestFlight crash log, in either report format. Public log safe."""
+    return _ips_essentials(text) or _text_essentials(text)
+
+
+def crashes(args):
+    """Print the essentials of the latest TestFlight crash feedback for the app: build, OS version,
+    exception and the crashed thread's backtrace. The repository is public, so this never asks for
+    or prints the tester's name, email, comment or anything that identifies a device."""
+    apple = AppStoreConnect(os.environ)
+    apps = apple.call("/v1/apps?" + urllib.parse.urlencode({"filter[bundleId]": args.bundle_id, "fields[apps]": "bundleId"}))
+    apps = [a for a in apps.get("data", []) if a["attributes"]["bundleId"] == args.bundle_id]
+    require(apps, f"no App Store Connect app record for {args.bundle_id}")
+    query = urllib.parse.urlencode({
+        # Sparse fields: email, comment, deviceModel and the tester are never even fetched.
+        "fields[betaFeedbackCrashSubmissions]": "createdDate,osVersion,appUptimeInMilliseconds,build,crashLog",
+        "include": "build", "fields[builds]": "version", "sort": "-createdDate", "limit": args.limit})
+    response = apple.call(f"/v1/apps/{apps[0]['id']}/betaFeedbackCrashSubmissions?{query}", soft=True)
+    if "_status" in response:
+        fail(f"crash submissions -> HTTP {response['_status']} {'; '.join(response['_errors'])}")
+    builds = {b["id"]: b["attributes"].get("version", "?") for b in response.get("included", []) if b.get("type") == "builds"}
+    submissions = response.get("data", [])
+    if not submissions:
+        summary("- No TestFlight crash feedback for this app yet (a tester submits it from the crash prompt "
+                "or the TestFlight app).")
+        return
+    summary(f"- {len(submissions)} TestFlight crash report(s), newest first.")
+    for number, item in enumerate(submissions, 1):
+        attributes = item.get("attributes", {})
+        build_id = ((item.get("relationships", {}).get("build") or {}).get("data") or {}).get("id")
+        uptime = attributes.get("appUptimeInMilliseconds")
+        print(f"\n=== crash {number}: {attributes.get('createdDate', '?')} build {builds.get(build_id, '?')} "
+              f"iOS {attributes.get('osVersion', '?')}" + (f", app up {uptime / 1000:.1f} s" if uptime else ""))
+        log = apple.call(f"/v1/betaFeedbackCrashSubmissions/{item['id']}/crashLog?"
+                         + urllib.parse.urlencode({"fields[betaCrashLogs]": "logText"}), soft=True)
+        if "_status" in log:
+            print(f"  crash log -> HTTP {log['_status']} {'; '.join(log['_errors'])}")
+            continue
+        text = ((log.get("data") or {}).get("attributes") or {}).get("logText") or ""
+        if not text:
+            print("  (no crash log attached)")
+            continue
+        for line in crash_essentials(text):
+            print(line)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     commands = parser.add_subparsers(dest="command", required=True)
@@ -1022,12 +1165,16 @@ def main():
     for flag in ("--bundle-id", "--version", "--build"):
         command.add_argument(flag, required=True)
     command.add_argument("--minutes", type=int, default=25)
+    command = commands.add_parser("crashes")
+    command.add_argument("--bundle-id", required=True)
+    command.add_argument("--limit", type=int, default=5)
     command = commands.add_parser("verify-ipa")
     for flag in ("--ipa", "--team", "--bundle-id", "--version", "--build"):
         command.add_argument(flag, required=True)
     args = parser.parse_args()
     {"apply": apply, "verify": verify, "xcconfig": write_xcconfig, "export-options": export_options,
-     "asc": asc, "cert": bootstrap_certificate, "verify-ipa": verify_ipa, "processing": processing}[args.command](args)
+     "asc": asc, "cert": bootstrap_certificate, "verify-ipa": verify_ipa, "processing": processing,
+     "crashes": crashes}[args.command](args)
 
 
 if __name__ == "__main__":
