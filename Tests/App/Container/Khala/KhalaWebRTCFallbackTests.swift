@@ -176,12 +176,18 @@ struct KhalaWebRTCFallbackTests {
 
     @Test func enginePlans() {
         let plan = ["webrtc", "hls", "mjpeg"]
-        #expect(KhalaLiveEngine.auto.plan(plan, webRTC: "webrtc", webKitFailedRepeatedly: false) == plan)
-        #expect(KhalaLiveEngine.auto.plan(plan, webRTC: "webrtc", webKitFailedRepeatedly: true) == ["hls", "mjpeg"])
-        #expect(KhalaLiveEngine.webKit.plan(plan, webRTC: "webrtc", webKitFailedRepeatedly: true) == plan)
-        #expect(KhalaLiveEngine.hls.plan(plan, webRTC: "webrtc", webKitFailedRepeatedly: false) == ["hls", "mjpeg"])
+        func planned(_ engine: KhalaLiveEngine, _ players: [String], failed: Bool) -> [String] {
+            engine.plan(players, webRTC: "webrtc", hls: "hls", webKitFailedRepeatedly: failed)
+        }
+        #expect(planned(.auto, plan, failed: false) == plan)
+        // With HLS on offer, repeated WebRTC failures keep the WebKit page (on its HLS lane, see lanes).
+        #expect(planned(.auto, plan, failed: true) == plan)
+        // A camera without HLS has nothing left for the page: on to MJPEG.
+        #expect(planned(.auto, ["webrtc", "mjpeg"], failed: true) == ["mjpeg"])
+        #expect(planned(.webKit, plan, failed: true) == plan)
+        #expect(planned(.hls, plan, failed: false) == ["hls", "mjpeg"])
         // A WebRTC-only camera keeps WebRTC rather than nothing.
-        #expect(KhalaLiveEngine.hls.plan(["webrtc"], webRTC: "webrtc", webKitFailedRepeatedly: false) == ["webrtc"])
+        #expect(planned(.hls, ["webrtc"], failed: false) == ["webrtc"])
         #expect(KhalaLiveEngine(stored: "hls") == .hls)
         #expect(KhalaLiveEngine(stored: "bogus") == .auto)
         #expect(KhalaLiveEngine(stored: nil) == .auto)

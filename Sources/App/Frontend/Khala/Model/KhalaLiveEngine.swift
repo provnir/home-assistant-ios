@@ -3,11 +3,12 @@ import Foundation
 /// Which engine the live view starts on. A hidden testing setting (App settings → General → Khala); `auto` is
 /// the default and the only one Nir needs.
 enum KhalaLiveEngine: String, CaseIterable, Equatable {
-    /// WebKit WebRTC first, unless it already failed twice on this camera in this app session; then HLS, MJPEG.
+    /// The WebKit page racing WebRTC and HLS as the frontend does; after two WebRTC failures on a camera in this
+    /// app session, the page runs its HLS lane only. Then AVPlayer HLS, then MJPEG.
     case auto
-    /// WebKit WebRTC first, always (the fallback memory is ignored).
+    /// The WebKit page with both lanes, always (the fallback memory is ignored).
     case webKit
-    /// Never WebRTC: straight to HLS, then MJPEG.
+    /// Never the WebKit page: straight to AVPlayer HLS, then MJPEG.
     case hls
 
     static let defaultsKey = "khala.liveEngine"
@@ -24,12 +25,13 @@ enum KhalaLiveEngine: String, CaseIterable, Equatable {
         }
     }
 
-    /// The players to try, given the camera's own plan (`CameraStreamPlan`, most preferred first). Drops WebRTC
-    /// when this engine (or the memory, for `auto`) says so, but never leaves a camera with nothing to play.
-    func plan<Player: Equatable>(_ players: [Player], webRTC: Player, webKitFailedRepeatedly: Bool) -> [Player] {
+    /// The players to try, given the camera's own plan (`CameraStreamPlan`, most preferred first). The `webRTC`
+    /// slot is the WebKit page. It is dropped when this engine says so, or when the page would have no lane left
+    /// to run (`lanes`), but a camera is never left with nothing to play.
+    func plan<Player: Equatable>(_ players: [Player], webRTC: Player, hls: Player, webKitFailedRepeatedly: Bool) -> [Player] {
         let skip: Bool
         switch self {
-        case .auto: skip = webKitFailedRepeatedly
+        case .auto: skip = webKitFailedRepeatedly && !players.contains(hls)
         case .webKit: skip = false
         case .hls: skip = true
         }
@@ -37,10 +39,38 @@ enum KhalaLiveEngine: String, CaseIterable, Equatable {
         let rest = players.filter { $0 != webRTC }
         return rest.isEmpty ? players : rest
     }
+
+    /// What the WebKit page runs for this camera: its WebRTC lane unless `auto` has seen WebRTC fail repeatedly
+    /// here, and its HLS lane whenever the camera offers HLS (`frontend_stream_types`).
+    func lanes<Player: Equatable>(_ players: [Player], webRTC: Player, hls: Player, webKitFailedRepeatedly: Bool)
+        -> KhalaLiveLanes {
+        let offersWebRTC = players.contains(webRTC)
+        let webRTCLane: Bool
+        switch self {
+        case .auto: webRTCLane = offersWebRTC && !webKitFailedRepeatedly
+        case .webKit, .hls: webRTCLane = offersWebRTC
+        }
+        let lanes = KhalaLiveLanes(webRTC: webRTCLane, hls: players.contains(hls))
+        // A camera whose only lane was dropped still gets its WebRTC: the plan kept the slot for it.
+        return lanes.isEmpty ? KhalaLiveLanes(webRTC: offersWebRTC, hls: false) : lanes
+    }
 }
 
-/// The app session's record of WebKit live failures per camera: after `limit` (two) failures that say something
-/// about WebKit (`KhalaLiveFailure.countsAgainstWebKit`), `auto` goes straight to HLS for that camera until the
+/// The lanes the WebKit live page runs, as the frontend's `frontend_stream_types` (the order does not matter:
+/// `KhalaStreamSelection` decides).
+struct KhalaLiveLanes: Equatable {
+    var webRTC: Bool
+    var hls: Bool
+
+    var isEmpty: Bool { !webRTC && !hls }
+
+    var streamKinds: [KhalaStreamKind] {
+        (hls ? [.hls] : []) + (webRTC ? [.webRTC] : [])
+    }
+}
+
+/// The app session's record of WebKit live failures per camera: after `limit` (two) WebRTC-lane failures that say
+/// something about WebKit (`KhalaLiveFailure.countsAgainstWebKit`), `auto` runs that camera on HLS only until the
 /// app is relaunched. Memory only, never persisted.
 struct KhalaLiveFallbackMemory: Equatable {
     var limit = 2

@@ -28,6 +28,8 @@ struct KhalaCameraView: View {
     @State private var snapshotFailed = false
     /// The player the live card settled on (WebRTC first when the camera offers it, `CameraStreamPlan`).
     @State private var livePlayer: KhalaLivePath?
+    /// The live card's player, for a Snapshot of the frame on screen at the stream's resolution.
+    @StateObject private var liveController = KhalaLiveController()
 
     private static let tabs = [
         KhalaSubTab(title: KhalaScreenText.live, symbol: .videoFill),
@@ -137,7 +139,11 @@ struct KhalaCameraView: View {
             HStack(spacing: 8) {
                 actionButton(KhalaScreenText.snapshot, symbol: .cameraFill) {
                     Task {
-                        if let image = await actions.snapshot(cameraEntityId: camera.entityId) {
+                        // The live frame when the card plays (full resolution, the moment on screen); otherwise the
+                        // server's still.
+                        if let image = await liveController.snapshot() {
+                            snapshot = KhalaSnapshot(image: image, cameraName: camera.name)
+                        } else if let image = await actions.snapshot(cameraEntityId: camera.entityId) {
                             snapshot = KhalaSnapshot(image: image, cameraName: camera.name)
                         } else {
                             snapshotFailed = true
@@ -169,7 +175,8 @@ struct KhalaCameraView: View {
                 cameraEntityId: camera.entityId,
                 cameraName: camera.name,
                 poster: { await actions.thumbnail(cameraEntityId: camera.entityId) },
-                onPlayer: { livePlayer = $0 }
+                onPlayer: { livePlayer = $0 },
+                controller: liveController
             )
             .id(camera.entityId)
             .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -175,7 +175,8 @@ struct KhalaWebRTCSignalingTests {
         #expect(signaling.handle(.page(.candidate(local))) == [.sendCandidate(sessionId: "S", local)])
         #expect(signaling.handle(.server(attempt: 1, .answer(sdp: "v=0 answer"))) == [.page(.answer(sdp: "v=0 answer"))])
         #expect(signaling.handle(.server(attempt: 1, .candidate(remote))) == [.page(.candidate(remote))])
-        #expect(signaling.handle(.server(attempt: 1, .candidate(nil))) == [])
+        // The end-of-candidates marker goes on to the page, as the frontend adds it.
+        #expect(signaling.handle(.server(attempt: 1, .candidate(nil))) == [.page(.endOfCandidates)])
         #expect(signaling.handle(.page(.frame(width: 2688, height: 1520))) == [.cancelDeadlines, .playing])
         #expect(signaling.handle(.page(.codec(mimeType: "video/H265"))) == [.codec("H.265")])
         #expect(signaling.phase == .playing)

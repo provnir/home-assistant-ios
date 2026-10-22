@@ -92,6 +92,14 @@ enum KhalaWebRTCPageMessage: Equatable {
     case error(message: String)
     /// Not fatal, logged only: a refused `play()`, a stats read that failed.
     case note(message: String)
+    /// The WebRTC lane received an audio track (it is held back from the stream while muted, as the frontend does).
+    case audio
+    /// The HLS lane's video element.
+    case hls(KhalaHLSPageEvent)
+    /// `webkitpresentationmodechanged`: "inline", "picture-in-picture" or "fullscreen".
+    case presentation(mode: String)
+    /// The poster still is set on the page's video elements.
+    case poster
 
     /// `WKScriptMessage.body`: a dictionary with a `type`.
     init?(body: Any) {
@@ -119,6 +127,36 @@ enum KhalaWebRTCPageMessage: Equatable {
             self = .error(message: json["message"] as? String ?? "")
         case "note":
             self = .note(message: json["message"] as? String ?? "")
+        case "audio":
+            self = .audio
+        case "hls":
+            guard let event = KhalaHLSPageEvent(json: json) else { return nil }
+            self = .hls(event)
+        case "presentation":
+            guard let mode = json["mode"] as? String else { return nil }
+            self = .presentation(mode: mode)
+        case "poster":
+            self = .poster
+        default:
+            return nil
+        }
+    }
+}
+
+/// What the page's HLS lane (`ha-hls-player`'s native path) reports.
+enum KhalaHLSPageEvent: Equatable {
+    /// `loadeddata`: the first frame.
+    case frame(width: Int, height: Int)
+    /// The video element's `error` (a `MediaError` code and message), after which the lane is out, as the
+    /// frontend's `_setRetryableError` reports `hasVideo: false`.
+    case error(message: String)
+
+    init?(json: [String: Any]) {
+        switch json["event"] as? String {
+        case "frame":
+            self = .frame(width: KhalaJSON.int(json["width"]) ?? 0, height: KhalaJSON.int(json["height"]) ?? 0)
+        case "error":
+            self = .error(message: json["message"] as? String ?? "")
         default:
             return nil
         }
@@ -133,6 +171,17 @@ enum KhalaWebRTCPageCommand: Equatable {
     case candidate(KhalaIceCandidate)
     case setMuted(Bool)
     case stop
+    /// The remote end-of-candidates (`{candidate: "", sdpMid: "0"}`, as the frontend adds it).
+    case endOfCandidates
+    /// Play this HLS playlist in the page's HLS lane.
+    case hlsStart(url: String)
+    case hlsStop
+    /// Bring a lane's video to the front.
+    case show(KhalaStreamKind)
+    /// The still both video elements show until their first frame (`poster`), as a data URL.
+    case setPoster(dataURL: String)
+    /// Enter or leave picture in picture with the video on screen.
+    case togglePictureInPicture
 
     /// The page's functions all return `true`, so WebKit always has a result it can bridge (an `undefined` result
     /// comes back as an "unsupported type" error on some releases).
@@ -148,6 +197,18 @@ enum KhalaWebRTCPageCommand: Equatable {
             return "window.khala.setMuted(\(muted ? "true" : "false"));"
         case .stop:
             return "window.khala.stop();"
+        case .endOfCandidates:
+            return "window.khala.endOfCandidates();"
+        case let .hlsStart(url):
+            return "window.khala.hlsStart(\(KhalaJSON.literal(url)));"
+        case .hlsStop:
+            return "window.khala.hlsStop();"
+        case let .show(kind):
+            return "window.khala.show(\(KhalaJSON.literal(kind == .hls ? "hls" : "rtc")));"
+        case let .setPoster(dataURL):
+            return "window.khala.setPoster(\(KhalaJSON.literal(dataURL)));"
+        case .togglePictureInPicture:
+            return "window.khala.togglePictureInPicture();"
         }
     }
 
@@ -156,7 +217,8 @@ enum KhalaWebRTCPageCommand: Equatable {
     var isEssential: Bool {
         switch self {
         case .start, .answer: return true
-        case .candidate, .setMuted, .stop: return false
+        case .candidate, .setMuted, .stop, .endOfCandidates, .hlsStart, .hlsStop, .show, .setPoster,
+             .togglePictureInPicture: return false
         }
     }
 }
@@ -462,7 +524,9 @@ struct KhalaWebRTCSignaling {
         case let .answer(sdp):
             return [.page(.answer(sdp: sdp))]
         case let .candidate(candidate):
-            return candidate.map { [.page(.candidate($0))] } ?? []
+            // The frontend hands even the empty end-of-candidates marker to `addIceCandidate` (with sdpMid "0"),
+            // which lets ICE settle without waiting out the remote side.
+            return [.page(candidate.map { .candidate($0) } ?? .endOfCandidates)]
         case let .error(_, message):
             if let message, KhalaLiveFailure.isUnsupported(message: message) {
                 return fail(.unsupported)
@@ -503,7 +567,8 @@ struct KhalaWebRTCSignaling {
         case let .error(text):
             guard isActive else { return [] }
             return fail(.page(text))
-        case .note:
+        case .note, .audio, .hls, .presentation, .poster:
+            // The session's, not the WebRTC lane's.
             return []
         }
     }

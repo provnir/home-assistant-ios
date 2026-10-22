@@ -1,23 +1,40 @@
 import Foundation
 
-/// The page `KhalaWebKitLivePlayer` loads into its small WKWebView: Apple's own WebRTC (WebKit), which negotiates the
-/// H.265 that Hikvision-style cameras stream through go2rtc, where the app's bundled Google libwebrtc offers only
-/// H.264/VP8 and falls back to HLS. It mirrors the frontend's `ha-web-rtc-player` (home-assistant/frontend
-/// `src/components/ha-web-rtc-player.ts` at 20260930.4, the frontend HA 2026.10.2 serves): an `RTCPeerConnection`
-/// on the server's ICE configuration, an optional data channel, recvonly audio + video transceivers, negotiation on
-/// `negotiationneeded`, the remote stream into a muted inline `<video>`.
+/// The page `KhalaWebKitLivePlayer` loads into its WKWebView: the Home Assistant frontend's camera player, ported
+/// (Apache-2.0, home-assistant/frontend release 20260930.4, the frontend HA 2026.10.x serves) into one local page
+/// with two lanes, as `ha-camera-stream` mounts two players:
 ///
-/// The page never talks to Home Assistant itself: it has no URL, no token and no remote script. Signaling goes
-/// through native (`KhalaWebRTCSignaling`), which rides the app's existing websocket:
+/// - the WebRTC lane is `src/components/ha-web-rtc-player.ts`: an `RTCPeerConnection` on the server's ICE
+///   configuration, the optional data channel, recvonly audio + video transceivers, the offer on
+///   `negotiationneeded`, trickled candidates both ways (the empty end-of-candidates included), an audio track held
+///   back from the stream while muted (`_addTrack`). Apple's WebRTC negotiates the H.265 the cameras send, which the
+///   app's bundled libwebrtc cannot;
+/// - the HLS lane is `src/components/ha-hls-player.ts` on WebKit's native HLS (`_renderHLSNative`: `src`, then
+///   `play()` on `loadedmetadata`), with the playlist native resolved and parsed (`KhalaHLSPlaylist`);
+/// - both videos stack in the same place (`object-fit` as the host asks); the one `KhalaStreamSelection` shows is
+///   on top. Where the frontend hides the other with `display: none`, here it stays rendered underneath, so the
+///   lane racing behind keeps playing (WebKit pauses muted autoplay it cannot see) and the switch is a z-order
+///   change, not a re-attach;
+/// - `poster` on both videos, as the frontend sets it, so the still sits in the video element itself until the
+///   first frame replaces it.
+///
+/// Improvements on top: picture in picture (`webkitSetPresentationMode`), a full-resolution frame grab, and raw
+/// stats for the info sheet.
+///
+/// The page never talks to Home Assistant itself: it has no token and no remote script. Signaling goes through
+/// native (`KhalaWebRTCSignaling`), which rides the app's existing websocket; the HLS lane plays only the playlist
+/// native gives it.
 ///
 /// - page → native, `window.webkit.messageHandlers.khala.postMessage(...)`, one of `KhalaWebRTCPageMessage`:
-///   `ready`, `offer {sdp}`, `candidate {candidate}`, `ice {state}`, `frame {width, height, how}`,
-///   `codec {mimeType}`, `error {message}` (fatal) and `note {message}` (logged only);
-/// - native → page, `window.khala.start(config)`, `.answer(sdp)`, `.candidate(init)`, `.setMuted(bool)`,
-///   `.stop()` (see `KhalaWebRTCPageCommand`).
+///   `ready`, `offer {sdp}`, `candidate {candidate}`, `ice {state}`, `frame {width, height, how}`, `audio`,
+///   `codec {mimeType}`, `hls {event, ...}`, `presentation {mode}`, `poster`, `error {message}` (fatal) and
+///   `note {message}` (logged only);
+/// - native → page, `window.khala.start(config)`, `.answer(sdp)`, `.candidate(init)`, `.endOfCandidates()`,
+///   `.setMuted(bool)`, `.stop()`, `.hlsStart(url)`, `.hlsStop()`, `.show(lane)`, `.setPoster(dataURL)`,
+///   `.togglePictureInPicture()` (see `KhalaWebRTCPageCommand`), and the async `.snapshot()` and `.stats()`.
 ///
-/// Errors are reported by message only — never the SDP, a candidate or the ICE configuration (which can carry TURN
-/// credentials), and nothing is written to the console.
+/// Errors are reported by message only — never the SDP, a candidate, an address, the ICE configuration (which can
+/// carry TURN credentials) or the playlist location, and nothing is written to the console.
 enum KhalaWebRTCPage {
     /// The name of the script message handler the page posts to.
     static let messageHandler = "khala"
@@ -44,18 +61,28 @@ enum KhalaWebRTCPage {
 html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: transparent;
   -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: {{FIT}}; background: transparent;
-  pointer-events: none; }
+  pointer-events: none; z-index: 1; }
+video.front { z-index: 2; }
 </style>
 </head>
 <body>
-<video id="v" playsinline muted autoplay disablepictureinpicture></video>
+<video id="rtc" class="front" playsinline muted autoplay></video>
+<video id="hls" playsinline muted autoplay></video>
 <script>
 "use strict";
+// Ported from the Home Assistant frontend (Apache-2.0), release 20260930.4: src/components/ha-web-rtc-player.ts
+// (the WebRTC lane), src/components/ha-hls-player.ts (the HLS lane, its native path) and
+// src/components/ha-camera-stream.ts (two lanes, one shown). Signaling and the choice of lane are native's.
 (function () {
-  var video = document.getElementById("v");
+  var video = document.getElementById("rtc");
+  var hlsVideo = document.getElementById("hls");
+  var front = video;
   var pc = null;
   var stream = null;
+  var heldAudio = [];
+  var muted = true;
   var generation = 0;
+  var hlsGeneration = 0;
   var sawFrame = false;
   var codecTimer = null;
   var frameTimer = null;
@@ -85,6 +112,16 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: {{F
     post({ type: "note", message: where + ": " + describe(error) });
   }
 
+  // A refused or interrupted play() is never a failure: the first-frame deadline decides that.
+  function resume(element, where) {
+    try {
+      var playing = element.play();
+      if (playing && playing.catch) { playing.catch(function (error) { note(where, error); }); }
+    } catch (error) {
+      note(where, error);
+    }
+  }
+
   window.addEventListener("error", function (event) {
     fail("script", event && event.message ? event.message : "error");
   });
@@ -92,6 +129,7 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: {{F
     note("promise", event && event.reason ? event.reason : "rejection");
   });
 
+  // ha-web-rtc-player `_cleanUp`: stop the tracks, release the element, close the peer connection.
   function cleanUp() {
     generation += 1;
     sawFrame = false;
@@ -110,6 +148,8 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: {{F
       stream.getTracks().forEach(function (track) { try { track.stop(); } catch (e) {} });
       stream = null;
     }
+    heldAudio.forEach(function (track) { try { track.stop(); } catch (e) {} });
+    heldAudio = [];
     try { video.pause(); } catch (e) {}
     try { video.srcObject = null; } catch (e) {}
   }
@@ -180,6 +220,35 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: {{F
   video.addEventListener("playing", onMediaEvent);
   video.addEventListener("resize", onMediaEvent);
 
+  // ha-hls-player `_cleanUp`.
+  function hlsCleanUp() {
+    hlsGeneration += 1;
+    hlsVideo.onloadedmetadata = null;
+    hlsVideo.onloadeddata = null;
+    hlsVideo.onerror = null;
+    try { hlsVideo.pause(); } catch (e) {}
+    hlsVideo.removeAttribute("src");
+    try { hlsVideo.load(); } catch (e) {}
+  }
+
+  function presentation(element) {
+    if (element.webkitPresentationMode) { return String(element.webkitPresentationMode); }
+    return document.pictureInPictureElement === element ? "picture-in-picture" : "inline";
+  }
+
+  [video, hlsVideo].forEach(function (element) {
+    var report = function () { post({ type: "presentation", mode: presentation(element) }); };
+    element.addEventListener("webkitpresentationmodechanged", report);
+    element.addEventListener("enterpictureinpicture", report);
+    element.addEventListener("leavepictureinpicture", report);
+  });
+
+  // WebKit pauses video while the app is in the background; the lane on screen picks up again on return (native
+  // decides whether the stream itself is kept, as the frontend's 60 s hidden clean-up does).
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden && (pc || hlsVideo.getAttribute("src"))) { resume(front, "resume"); }
+  });
+
   window.khala = {
     start: function (config) {
       cleanUp();
@@ -191,13 +260,14 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: {{F
         return true;
       }
       if (config.dataChannel) {
-        // Some cameras (Nest) only start sending once the channel exists, as in the frontend.
+        // "Some cameras (such as nest) require a data channel to establish a stream".
         try { pc.createDataChannel(config.dataChannel); } catch (error) { note("data channel", error); }
       }
       stream = new MediaStream();
       // Attached once. Setting srcObject again (one track event per audio and video) restarts the element's load,
       // which rejects the play() still pending with AbortError — that is what made build 30.1 give way at once.
       video.srcObject = stream;
+      video.muted = muted;
       pc.onnegotiationneeded = function () {
         if (!pc || gen !== generation) { return; }
         var connection = pc;
@@ -221,6 +291,12 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: {{F
       };
       pc.ontrack = function (event) {
         if (gen !== generation || !stream) { return; }
+        if (event.track.kind === "audio") {
+          post({ type: "audio" });
+          // ha-web-rtc-player `_addTrack`: "If the track is audio and the player is muted, we do not add it to the
+          // stream." Held here instead, so unmuting can add it without a new session.
+          if (muted) { heldAudio.push(event.track); return; }
+        }
         stream.addTrack(event.track);
         if (event.track.kind !== "video") { return; }
         watchForFrames(gen);
@@ -248,17 +324,169 @@ video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: {{F
       pc.addIceCandidate(init).catch(function () {});
       return true;
     },
-    setMuted: function (muted) {
-      video.muted = !!muted;
-      if (!muted && pc) {
-        var playing = video.play();
-        if (playing && playing.catch) { playing.catch(function (error) { note("unmute", error); }); }
+    endOfCandidates: function () {
+      if (!pc) { return true; }
+      // As the frontend passes an empty candidate on: `new RTCIceCandidate({candidate: "", sdpMid: "0"})`.
+      pc.addIceCandidate({ candidate: "", sdpMid: "0" }).catch(function () {});
+      return true;
+    },
+    setMuted: function (value) {
+      muted = !!value;
+      video.muted = muted;
+      hlsVideo.muted = muted;
+      if (!muted && stream && heldAudio.length) {
+        heldAudio.forEach(function (track) { stream.addTrack(track); });
+        heldAudio = [];
       }
+      if (!muted) { resume(front, "unmute"); }
       return true;
     },
     stop: function () {
       cleanUp();
       return true;
+    },
+    // ha-hls-player `_renderHLSNative`: the source, then play() once the metadata is in.
+    hlsStart: function (url) {
+      hlsCleanUp();
+      var gen = hlsGeneration;
+      hlsVideo.muted = muted;
+      hlsVideo.onloadedmetadata = function () { if (gen === hlsGeneration) { resume(hlsVideo, "hls play"); } };
+      hlsVideo.onloadeddata = function () {
+        if (gen !== hlsGeneration) { return; }
+        post({ type: "hls", event: "frame", width: hlsVideo.videoWidth || 0, height: hlsVideo.videoHeight || 0 });
+      };
+      hlsVideo.onerror = function () {
+        if (gen !== hlsGeneration) { return; }
+        var error = hlsVideo.error;
+        post({ type: "hls", event: "error", message: "media error " + (error ? error.code : 0) });
+      };
+      hlsVideo.setAttribute("src", url);
+      return true;
+    },
+    hlsStop: function () {
+      hlsCleanUp();
+      return true;
+    },
+    // ha-camera-stream: the shown player is the visible one; the other stays mounted underneath.
+    show: function (lane) {
+      front = lane === "hls" ? hlsVideo : video;
+      var back = front === video ? hlsVideo : video;
+      front.className = "front";
+      back.className = "";
+      resume(front, "show");
+      return true;
+    },
+    // The frontend's `poster` (its cached `camera_proxy` still); decoded first so a broken one never blanks it.
+    setPoster: function (url) {
+      var image = new Image();
+      image.onload = function () {
+        video.poster = url;
+        hlsVideo.poster = url;
+        post({ type: "poster" });
+      };
+      image.onerror = function () { note("poster", "unreadable"); };
+      image.setAttribute("src", url);
+      return true;
+    },
+    togglePictureInPicture: function () {
+      var element = front;
+      try {
+        if (element.webkitSupportsPresentationMode && element.webkitSupportsPresentationMode("picture-in-picture")) {
+          var mode = element.webkitPresentationMode === "picture-in-picture" ? "inline" : "picture-in-picture";
+          element.webkitSetPresentationMode(mode);
+        } else if (document.pictureInPictureElement) {
+          document.exitPictureInPicture().catch(function (error) { note("pip", error); });
+        } else if (element.requestPictureInPicture) {
+          element.requestPictureInPicture().catch(function (error) { note("pip", error); });
+        } else {
+          note("pip", "not supported");
+        }
+      } catch (error) {
+        note("pip", error);
+      }
+      return true;
+    },
+    // The frame on screen at the stream's own resolution, as a JPEG data URL; null when there is none or the
+    // canvas is tainted (an HLS lane served from another origin), and native falls back to the server's still.
+    snapshot: function () {
+      var element = front;
+      var width = element.videoWidth;
+      var height = element.videoHeight;
+      if (!width || !height) { return null; }
+      try {
+        var canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        canvas.getContext("2d").drawImage(element, 0, 0, width, height);
+        return canvas.toDataURL("image/jpeg", 0.92);
+      } catch (error) {
+        note("snapshot", error);
+        return null;
+      }
+    },
+    // Raw counters for the info sheet (`KhalaLiveStats`); candidate types only, never an address.
+    stats: function () {
+      if (front === hlsVideo) {
+        var seekable = hlsVideo.seekable;
+        var behind = null;
+        if (seekable && seekable.length) {
+          behind = Math.max(0, seekable.end(seekable.length - 1) - hlsVideo.currentTime);
+        }
+        var quality = hlsVideo.getVideoPlaybackQuality ? hlsVideo.getVideoPlaybackQuality() : null;
+        return Promise.resolve({
+          lane: "hls", t: performance.now(), bytes: hlsVideo.webkitVideoDecodedByteCount,
+          frames: quality ? quality.totalVideoFrames : hlsVideo.webkitDecodedFrameCount,
+          dropped: quality ? quality.droppedVideoFrames : hlsVideo.webkitDroppedFrameCount,
+          w: hlsVideo.videoWidth, h: hlsVideo.videoHeight, behind: behind
+        });
+      }
+      if (!pc) { return Promise.resolve(null); }
+      return pc.getStats().then(function (stats) {
+        var out = { lane: "webrtc", t: 0 };
+        var codecs = {};
+        var candidates = {};
+        var pairs = [];
+        var codecId = null;
+        var selected = null;
+        stats.forEach(function (report) {
+          if (report.type === "codec") {
+            codecs[report.id] = report;
+          } else if (report.type === "inbound-rtp" && (report.kind === "video" || report.mediaType === "video")) {
+            out.t = report.timestamp;
+            out.bytes = report.bytesReceived;
+            out.frames = report.framesDecoded;
+            out.fps = report.framesPerSecond;
+            out.w = report.frameWidth;
+            out.h = report.frameHeight;
+            out.dropped = report.framesDropped;
+            out.lost = report.packetsLost;
+            out.jitter = report.jitter;
+            codecId = report.codecId;
+          } else if (report.type === "candidate-pair") {
+            pairs.push(report);
+          } else if (report.type === "local-candidate" || report.type === "remote-candidate") {
+            candidates[report.id] = report;
+          } else if (report.type === "transport" && report.selectedCandidatePairId) {
+            selected = report.selectedCandidatePairId;
+          }
+        });
+        var pair = null;
+        pairs.forEach(function (candidate) {
+          if (candidate.id === selected || (!selected && candidate.nominated && candidate.state === "succeeded")) {
+            pair = candidate;
+          }
+        });
+        if (pair) {
+          out.rtt = pair.currentRoundTripTime;
+          var local = candidates[pair.localCandidateId];
+          var remote = candidates[pair.remoteCandidateId];
+          if (local) { out.local = local.candidateType; out.protocol = local.protocol; }
+          if (remote) { out.remote = remote.candidateType; }
+        }
+        if (codecId && codecs[codecId]) { out.codec = codecs[codecId].mimeType; }
+        if (!out.t) { out.t = performance.now(); }
+        return out;
+      });
     }
   };
 

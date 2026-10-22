@@ -31,6 +31,9 @@ struct CameraPlayerView: View {
     @State private var cameraSnapshots: [String: UIImage] = [:]
     @State private var controlsVisible = true
     @State private var showLoader = true
+    /// Khala: what the WebKit live page runs for this camera, and the still it shows until the first frame.
+    @State private var liveLanes = KhalaLiveLanes(webRTC: true, hls: false)
+    @State private var posterImage: UIImage?
 
     private let maxTitleTextWidth: CGFloat = 100
     private let topScrimHeight: CGFloat = 140
@@ -66,6 +69,9 @@ struct CameraPlayerView: View {
         // cancelled on dismissal and reruns by itself when the picker switches camera.
         .task(id: cameraEntityId) {
             await loadCapabilities()
+        }
+        .task(id: cameraEntityId) {
+            await loadPoster()
         }
         .statusBarHidden(true)
         .persistentSystemOverlays(.hidden)
@@ -227,13 +233,16 @@ struct CameraPlayerView: View {
     private func player(_ playerType: CameraPlayerType) -> some View {
         switch playerType {
         case .webRTC:
-            // Khala: Apple's WebRTC in a WKWebView (negotiates H.265) instead of the bundled libwebrtc.
+            // Khala: the frontend's player in a WKWebView — Apple's WebRTC (negotiates H.265, unlike the bundled
+            // libwebrtc) racing WebKit's HLS — with zoom, picture in picture, snapshot and swipe down to close.
             KhalaWebKitLivePlayer(
                 server: server,
                 cameraEntityId: cameraEntityId,
                 cameraName: name ?? cameraName,
+                lanes: liveLanes,
                 fit: .contain,
-                swipeDownDismisses: true,
+                style: .fullScreen,
+                poster: posterImage,
                 controlsVisible: $controlsVisible,
                 showLoader: $showLoader,
                 onWebRTCUnsupported: {
@@ -281,11 +290,24 @@ struct CameraPlayerView: View {
         // mid-fetch still lands here; a stale answer must not decide the plan for the camera now
         // on screen.
         guard entityId == cameraEntityId else { return }
-        // Khala: the hidden Live engine setting and this app session's WebKit failures may drop WebRTC.
-        playback.start(with: KhalaLiveEngineStore.plan(
-            CameraStreamPlan.players(for: capabilities),
-            cameraEntityId: entityId
-        ))
+        // Khala: the hidden Live engine setting and this app session's WebKit failures shape the plan and the page.
+        let players = CameraStreamPlan.players(for: capabilities)
+        liveLanes = KhalaLiveEngineStore.lanes(players, cameraEntityId: entityId)
+        playback.start(with: KhalaLiveEngineStore.plan(players, cameraEntityId: entityId))
+    }
+
+    /// Khala: the camera's still for the live page's poster — the picker's cached one at once, then a full one.
+    @MainActor
+    private func loadPoster() async {
+        let entityId = cameraEntityId
+        posterImage = nil
+        if let appEntity = HAAppEntity.entity(id: entityId, serverId: server.identifier.rawValue) {
+            posterImage = CameraPickerSnapshotCache.shared.image(for: snapshotKey(for: appEntity))
+        }
+        guard let api = Current.api(for: server),
+              let image = try? await api.getCameraSnapshot(cameraEntityID: entityId).asyncValue(),
+              entityId == cameraEntityId else { return }
+        posterImage = image
     }
 
     private func loadMetadata() {
