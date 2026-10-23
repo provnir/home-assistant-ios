@@ -3,8 +3,9 @@ import Shared
 import SwiftUI
 
 /// The main menu, revealed under the screen card (mockup `DayMenu`): who/where, a search field, the destinations,
-/// the DEVICES list built from Home Assistant data, and Settings at the bottom. Search filters destinations and
-/// devices by name; it never side-scrolls. Its ground is the shell's, drawn across the whole window.
+/// the DEVICES list built from Home Assistant data, and Settings as a floating glass button in the bottom corner.
+/// Search filters destinations and devices by name; it never side-scrolls. Its ground is the shell's, drawn across
+/// the whole window.
 struct KhalaMenuView: View {
     let homeName: String
     let summary: String
@@ -23,7 +24,8 @@ struct KhalaMenuView: View {
     /// The dashboard on screen while the web UI is (its row is the highlighted one, not "Dashboards").
     var highlightedDashboardId: String?
     var onDashboard: (KhalaDashboard) -> Void = { _ in }
-    /// The Settings row is lit (the Settings screen, or one of Home Assistant's settings pages, is on screen).
+    /// The Settings button is lit, its gear filled (the Settings screen, or one of Home Assistant's settings pages,
+    /// is on screen).
     var isSettingsSelected = false
     let onSelect: (KhalaDestination) -> Void
     let onDevice: (KhalaDevice) -> Void
@@ -158,20 +160,25 @@ struct KhalaMenuView: View {
             }
             .scrollIndicators(.hidden)
             .scrollDismissesKeyboard(.immediately)
-
-            // Settings: the app's and the server's, in one screen (`KhalaSettingsView`).
-            KhalaMenuRow(
-                title: KhalaText.settings,
-                symbol: .gearshape,
-                symbolColor: KhalaTheme.ink,
-                isSelected: isSettingsSelected,
-                action: onSettings
-            )
-            .padding(.top, 6)
+            // Settings (the app's and the server's, in one screen: `KhalaSettingsView`) floats as one glass button
+            // at the column's bottom-trailing corner, as in the Zoe app's sidebar (`SidebarChrome`): the list runs
+            // under it, and the inset it adds to the scroll view lets the last row scroll clear of it. The column
+            // ends where the moved-aside card begins (`KhalaDrawerMath.openWidth`), so the corner is always in view;
+            // the scroll view takes the column's height whatever the search leaves, so filtering never moves it,
+            // and with the keyboard up it rides just above it.
+            .safeAreaInset(edge: .bottom, alignment: .trailing, spacing: 0) {
+                KhalaGlassButton(
+                    symbol: isSettingsSelected ? .gearshapeFill : .gearshape,
+                    accessibilityLabel: KhalaText.settings,
+                    action: onSettings
+                )
+                .accessibilityAddTraits(isSettingsSelected ? .isSelected : [])
+                .accessibilityIdentifier("khala.menu.settings")
+                .padding(.vertical, 8)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.top, 11)
-        .padding(.bottom, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .onChange(of: searchFocusRequest) { _ in
             isSearchFocused = true

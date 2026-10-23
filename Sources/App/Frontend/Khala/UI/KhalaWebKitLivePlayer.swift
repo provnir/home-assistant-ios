@@ -139,8 +139,8 @@ struct KhalaWebKitLivePlayer: View {
             default: break
             }
         }
-        .sheet(item: $snapshot) { snapshot in
-            KhalaSnapshotSheet(snapshot: snapshot)
+        .khalaStillCover(item: $snapshot) { snapshot in
+            KhalaSnapshotViewer(snapshot: snapshot, onClose: { self.snapshot = nil })
         }
         .sheet(isPresented: $showsInfo) {
             KhalaLiveInfoSheet(session: session)

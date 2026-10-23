@@ -2,7 +2,7 @@ import SFSafeSymbols
 import SwiftUI
 import UIKit
 
-/// A 48 pt row of the Khala menu: a destination (plain glyph), a device (glyph in a tinted circle) or Settings.
+/// A 48 pt row of the Khala menu: a destination (plain glyph), a dashboard or a device (glyph in a tinted circle).
 /// The selected destination sits on a white platter.
 struct KhalaMenuRow: View {
     let title: String

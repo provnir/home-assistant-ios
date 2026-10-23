@@ -159,7 +159,7 @@ struct KhalaShellView: View {
         }
         // Detection captures: the cards' thumbnails and the full-screen still viewer.
         .environment(\.khalaCaptures, shell.captures)
-        .fullScreenCover(item: $shell.captureViewer) { request in
+        .khalaStillCover(item: $shell.captureViewer) { request in
             KhalaCaptureViewer(
                 request: request,
                 source: shell.captures,

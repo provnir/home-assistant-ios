@@ -52,9 +52,11 @@ struct KhalaCaptureThumbnail: View {
     }
 }
 
-/// The full-screen still viewer of a camera's detection captures (build 19.1: a tap on a detection showed the
-/// live stream, not what was detected). Swipes between the camera's captures of that day, oldest on the left;
-/// shares the one on screen; "Go live" leaves for the camera's live view.
+/// The full-screen viewer of a camera's detection captures (build 19.1: a tap on a detection showed the live stream,
+/// not what was detected), on the shared zoomable still viewer (`KhalaStillViewer`). Swipes between the camera's
+/// captures of that day, oldest on the left; shares the one on screen; "Go live" leaves for the camera's live view.
+/// Each page is the full-size capture, loaded for the page on screen first, then its neighbours; only the pages
+/// around it stay in memory (`KhalaStillPaging`).
 struct KhalaCaptureViewer: View {
     let request: KhalaCaptureViewerRequest
     let source: KhalaCaptureSource
@@ -67,28 +69,43 @@ struct KhalaCaptureViewer: View {
     @State private var images: [String: UIImage] = [:]
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            TabView(selection: $selection) {
-                ForEach(shown) { capture in
-                    page(capture)
-                        .tag(Optional(capture.id))
+        KhalaStillViewer(
+            title: request.cameraName,
+            subtitle: subtitle,
+            stills: shown.map { capture in
+                KhalaStill(
+                    id: capture.id,
+                    image: images[capture.id],
+                    accessibilityLabel: "\(request.cameraName), \(KhalaText.time(capture.date, calendar: calendar))"
+                )
+            },
+            index: Binding(
+                get: { currentIndex },
+                set: { index in
+                    if shown.indices.contains(index) { selection = shown[index].id }
                 }
+            ),
+            onClose: onClose
+        ) {
+            Button(action: onLive) {
+                Label(KhalaScreenText.goLive, systemSymbol: .videoFill)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(KhalaTheme.ink)
+                    .padding(.horizontal, 20)
+                    .frame(height: 48)
+                    .khalaGlass(in: Capsule(), interactive: true)
+                    .contentShape(Capsule())
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
-            .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                topBar
-                Spacer()
-                bottomBar
-            }
+            .buttonStyle(KhalaPressStyle())
         }
-        .statusBarHidden(false)
         .task(id: request.id) {
             selection = request.capture.id
             let day = await source.captures(cameraEntityId: request.cameraEntityId, day: request.capture.date)
             captures = day.contains(request.capture) ? day : (day + [request.capture]).sorted { $0.date < $1.date }
+        }
+        // Again on every page turn, and once the day's list is in (the same capture, new neighbours).
+        .task(id: "\(selection ?? "")#\(shown.count)") {
+            await loadImages()
         }
     }
 
@@ -97,81 +114,31 @@ struct KhalaCaptureViewer: View {
         captures.isEmpty ? [request.capture] : captures
     }
 
-    private var current: KhalaCapture {
-        shown.first { $0.id == selection } ?? request.capture
-    }
-
-    private func page(_ capture: KhalaCapture) -> some View {
-        ZStack {
-            if let image = images[capture.id] {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .accessibilityLabel("\(request.cameraName), \(KhalaText.time(capture.date, calendar: calendar))")
-            } else {
-                ProgressView().tint(.white)
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .task(id: capture.id) {
-            guard images[capture.id] == nil else { return }
-            if let image = await source.image(for: capture, thumbnail: false) {
-                images[capture.id] = image
-            }
-        }
-    }
-
-    private var topBar: some View {
-        HStack(spacing: 12) {
-            KhalaGlassButton(symbol: .xmark, accessibilityLabel: KhalaScreenText.close, action: onClose)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(request.cameraName)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(Color.white)
-                    .lineLimit(1)
-                Text(subtitle)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.7))
-                    .monospacedDigit()
-            }
-            Spacer(minLength: 0)
-            if let image = images[current.id] {
-                ShareLink(
-                    item: Image(uiImage: image),
-                    preview: SharePreview(request.cameraName, image: Image(uiImage: image))
-                ) {
-                    Image(systemSymbol: .squareAndArrowUp)
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(KhalaTheme.ink)
-                        .frame(width: 44, height: 44)
-                        .khalaGlass(in: Circle(), interactive: true)
-                        .contentShape(Circle())
-                }
-                .accessibilityLabel(KhalaScreenText.share)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 9)
+    private var currentIndex: Int {
+        shown.firstIndex { $0.id == selection } ?? shown.firstIndex(of: request.capture) ?? 0
     }
 
     /// "08:35 · 3 of 12"
     private var subtitle: String {
-        let time = KhalaText.time(current.date, calendar: calendar)
-        guard shown.count > 1, let index = shown.firstIndex(of: current) else { return time }
+        let index = currentIndex
+        let time = KhalaText.time(shown[index].date, calendar: calendar)
+        guard shown.count > 1 else { return time }
         return "\(time) · \(KhalaScreenText.position(index + 1, of: shown.count))"
     }
 
-    private var bottomBar: some View {
-        Button(action: onLive) {
-            Label(KhalaScreenText.goLive, systemSymbol: .videoFill)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(KhalaTheme.ink)
-                .padding(.horizontal, 20)
-                .frame(height: 48)
-                .khalaGlass(in: Capsule(), interactive: true)
-                .contentShape(Capsule())
+    /// The full-size images of the page on screen and its neighbours, in that order; the ones further away let go.
+    private func loadImages() async {
+        let shown = shown
+        let index = currentIndex
+        images = images.filter { id, _ in
+            shown.firstIndex { $0.id == id }.map { KhalaStillPaging.keeps($0, around: index) } ?? false
         }
-        .buttonStyle(KhalaPressStyle())
-        .padding(.bottom, 16)
+        for page in KhalaStillPaging.loadOrder(around: index, count: shown.count) {
+            let capture = shown[page]
+            guard images[capture.id] == nil else { continue }
+            let image = await source.image(for: capture, thumbnail: false)
+            guard !Task.isCancelled else { return }
+            if let image { images[capture.id] = image }
+        }
     }
 }

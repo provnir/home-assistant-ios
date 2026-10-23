@@ -1,8 +1,9 @@
 import Foundation
 
-/// The live player's zoom rules. The zoom itself is a `UIScrollView` around the web view (`KhalaLiveZoomView`):
-/// pinch, pan, momentum, edge rubber-banding and the bounce back past the limits all run in UIKit and Core
-/// Animation on the render server, with no round trip into the page. These are only the choices around it.
+/// The zoom rules of the live player and the still viewer. The zoom itself is a `UIScrollView` around the content
+/// (`KhalaZoomContainer`: the web view for live, an image view for a still): pinch, pan, momentum, edge
+/// rubber-banding and the bounce back past the limits all run in UIKit and Core Animation on the render server, with
+/// no round trip into the page. These are only the choices around it.
 enum KhalaLiveZoom {
     static let minimum: CGFloat = 1
     static let maximum: CGFloat = 4
@@ -40,6 +41,24 @@ enum KhalaLiveZoom {
             return "\(Int(tenths / 10))×"
         }
         return String(format: "%.1f×", tenths / 10)
+    }
+
+    /// A still's unzoomed size: `aspect` (the image's own size) fitted inside `bounds`, as `.scaleAspectFit` draws it.
+    /// The zoom works on that rectangle, not the whole screen, so a zoomed still pans to its own edges and never
+    /// into the letterbox around it. An empty aspect fills the bounds.
+    static func fittedSize(_ aspect: CGSize, in bounds: CGSize) -> CGSize {
+        guard aspect.width > 0, aspect.height > 0, bounds.width > 0, bounds.height > 0 else { return bounds }
+        // Wider than the bounds: full width, letterboxed; otherwise full height, pillarboxed.
+        if aspect.width * bounds.height > aspect.height * bounds.width {
+            return CGSize(width: bounds.width, height: bounds.width * aspect.height / aspect.width)
+        }
+        return CGSize(width: bounds.height * aspect.width / aspect.height, height: bounds.height)
+    }
+
+    /// The inset on each side that keeps zoomed content of `size` centred in `bounds` while it is smaller than them
+    /// along an axis (the still's letterbox at 1×, shrinking as it zooms); zero once it fills that axis.
+    static func centringInset(content size: CGSize, in bounds: CGSize) -> CGSize {
+        CGSize(width: max((bounds.width - size.width) / 2, 0), height: max((bounds.height - size.height) / 2, 0))
     }
 
     /// Full screen's swipe down: past a third of 300 pt, or a downward flick.

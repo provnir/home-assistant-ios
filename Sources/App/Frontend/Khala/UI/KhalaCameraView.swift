@@ -90,8 +90,8 @@ struct KhalaCameraView: View {
             let events = KhalaCameraCatalog.eventEntities(for: camera, in: live.entities).map(\.entityId)
             history = await actions.history(entityIds: events, since: Current.date().addingTimeInterval(-7 * 86400))
         }
-        .sheet(item: $snapshot) { snapshot in
-            KhalaSnapshotSheet(snapshot: snapshot)
+        .khalaStillCover(item: $snapshot) { snapshot in
+            KhalaSnapshotViewer(snapshot: snapshot, onClose: { self.snapshot = nil })
         }
         .alert(KhalaScreenText.snapshotFailed, isPresented: $snapshotFailed) {
             Button(KhalaScreenText.close, role: .cancel) {}
