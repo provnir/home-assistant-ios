@@ -59,18 +59,20 @@ final class KhalaStillPager: UIView, UIScrollViewDelegate {
     func show(_ stills: [KhalaStill], at index: Int) {
         let isNewList = stills.map(\.id) != self.stills.map(\.id)
         self.stills = stills
-        let index = min(max(index, 0), max(stills.count - 1, 0))
+        let target = min(max(index, 0), max(stills.count - 1, 0))
         if isNewList {
             pages.values.forEach { $0.container.removeFromSuperview() }
             pages = [:]
         }
-        if isNewList || (index != self.index && !isTurning) {
+        if isNewList || (target != self.index && !isTurning) {
             pages[self.index]?.container.resetZoom(animated: false)
-            self.index = index
+            self.index = target
             layoutPages()
-            onZoom?(KhalaLiveZoom.minimum)
+            // Called from SwiftUI's update of the pager: the chip hears of the new page's 1× after it.
+            DispatchQueue.main.async { [weak self] in self?.onZoom?(KhalaLiveZoom.minimum) }
         }
         tile()
+        updatePagingGate()
     }
 
     /// The zoom chip: the page on screen back to 1×.
@@ -144,27 +146,27 @@ final class KhalaStillPager: UIView, UIScrollViewDelegate {
         scroller.contentSize = CGSize(width: stride * CGFloat(stills.count), height: bounds.height)
         scroller.contentOffset = CGPoint(x: CGFloat(index) * stride, y: 0)
         for (page, view) in pages {
-            view.container.frame = frame(ofPage: page)
+            view.container.frame = pageFrame(page)
         }
         isLayingOut = false
     }
 
-    private func frame(ofPage page: Int) -> CGRect {
+    private func pageFrame(_ page: Int) -> CGRect {
         CGRect(x: KhalaStillPaging.pageX(page, width: bounds.width), y: 0, width: bounds.width, height: bounds.height)
     }
 
     /// Keeps the page on screen and its neighbours as views, each showing its still as it is now.
     private func tile() {
-        guard let window = KhalaStillPaging.window(around: index, count: stills.count) else {
+        guard let kept = KhalaStillPaging.window(around: index, count: stills.count) else {
             pages.values.forEach { $0.container.removeFromSuperview() }
             pages = [:]
             return
         }
-        for (page, view) in pages where !window.contains(page) {
+        for (page, view) in pages where !kept.contains(page) {
             view.container.removeFromSuperview()
             pages[page] = nil
         }
-        for page in window {
+        for page in kept {
             let view = pages[page] ?? makePage(page)
             view.show(stills[page])
         }
@@ -173,9 +175,12 @@ final class KhalaStillPager: UIView, UIScrollViewDelegate {
     private func makePage(_ page: Int) -> Page {
         let view = Page()
         let container = view.container
-        container.frame = frame(ofPage: page)
+        container.frame = pageFrame(page)
         container.allowsSwipeDown = true
         container.allowsZoom = !isTurning
+        // Its scroll view clips the picture; the container itself must not, or a swipe down would cut the picture
+        // off at the page's bottom edge as it follows the finger.
+        container.clipsToBounds = false
         container.onTap = { [weak self] in self?.onTap?() }
         container.onZoom = { [weak self, weak container] scale in
             guard let self, let container, self.pages[self.index]?.container === container else { return }
@@ -202,13 +207,15 @@ final class KhalaStillPager: UIView, UIScrollViewDelegate {
 
     /// One page: the zoom container around an image view, and a spinner while the full-size image loads.
     private final class Page {
-        let imageView = UIImageView()
+        let imageView: UIImageView
         let spinner = UIActivityIndicatorView(style: .large)
         let container: KhalaZoomContainer
 
         init() {
+            let imageView = UIImageView()
             // The container fits its content to the image's shape; aspect fit only guards a stale frame.
             imageView.contentMode = .scaleAspectFit
+            self.imageView = imageView
             container = KhalaZoomContainer(hosting: imageView)
             container.isAccessibilityElement = true
             spinner.color = .white

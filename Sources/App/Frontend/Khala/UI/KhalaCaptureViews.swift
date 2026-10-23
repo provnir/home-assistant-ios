@@ -128,13 +128,13 @@ struct KhalaCaptureViewer: View {
 
     /// The full-size images of the page on screen and its neighbours, in that order; the ones further away let go.
     private func loadImages() async {
-        let shown = shown
+        let pages = shown
         let index = currentIndex
         images = images.filter { id, _ in
-            shown.firstIndex { $0.id == id }.map { KhalaStillPaging.keeps($0, around: index) } ?? false
+            pages.firstIndex { $0.id == id }.map { KhalaStillPaging.keeps($0, around: index) } ?? false
         }
-        for page in KhalaStillPaging.loadOrder(around: index, count: shown.count) {
-            let capture = shown[page]
+        for page in KhalaStillPaging.loadOrder(around: index, count: pages.count) {
+            let capture = pages[page]
             guard images[capture.id] == nil else { continue }
             let image = await source.image(for: capture, thumbnail: false)
             guard !Task.isCancelled else { return }
