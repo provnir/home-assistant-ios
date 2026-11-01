@@ -80,24 +80,9 @@ struct KhalaControlTile: View {
             }
             .buttonStyle(.plain)
             .disabled(control.tapIntent == nil)
-            .confirmationDialog(
-                KhalaScreenText.confirmAction(confirmTitle),
-                isPresented: Binding(get: { asking != nil }, set: { if !$0 { asking = nil } }),
-                titleVisibility: .visible,
-                presenting: asking
-            ) { intent in
-                Button(confirmTitle) { onIntent(intent) }
-                Button(KhalaScreenText.cancel, role: .cancel) {}
-            }
+            // "Unlock lock?" / "Open charge port door" (41.1's words); a yes sends the intent confirmed.
+            .khalaConfirmation(control, asking: $asking, onIntent: onIntent)
         }
-    }
-
-    /// "Unlock lock", "Open charge port door" (41.1's words), else the control's name.
-    private var confirmTitle: String {
-        guard let intent = asking ?? control.tapIntent, let confirm = control.confirmation(for: intent) else {
-            return control.title
-        }
-        return KhalaScreenText.confirmTitle(confirm, control: control.title)
     }
 }
 

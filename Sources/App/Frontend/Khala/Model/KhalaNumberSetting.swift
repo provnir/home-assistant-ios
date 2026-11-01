@@ -9,6 +9,9 @@ struct KhalaNumberSetting: Equatable {
     let maximum: Double
     let step: Double
     let unit: String?
+    /// Shows tenths ("22.5°") instead of whole units: a room's climate target moves in half degrees. The car's
+    /// cabin target keeps 41.1's whole degrees.
+    var showsTenths = false
 
     init?(_ entity: KhalaEntity, attributes: [String: Any]) {
         guard let value = Double(entity.state) else { return nil }
@@ -33,8 +36,10 @@ struct KhalaNumberSetting: Equatable {
 
     /// The same setting showing `value` (the optimistic overlay).
     func with(value newValue: Double) -> KhalaNumberSetting {
-        KhalaNumberSetting(entityId: entityId, title: title, value: newValue, minimum: minimum, maximum: maximum,
-                           step: step, unit: unit)
+        var setting = KhalaNumberSetting(entityId: entityId, title: title, value: newValue, minimum: minimum,
+                                         maximum: maximum, step: step, unit: unit)
+        setting.showsTenths = showsTenths
+        return setting
     }
 
     /// `value` moved by `steps` steps, kept in bounds and on the step grid.
@@ -50,7 +55,13 @@ struct KhalaNumberSetting: Equatable {
         return min(1, max(0, (value - minimum) / (maximum - minimum)))
     }
 
-    var text: String { KhalaText.measurement(value, unit: unit) }
+    var text: String { text(value) }
+
+    /// `value` in this setting's words: "80%", "21°", or with `showsTenths` "22.5°".
+    func text(_ value: Double) -> String {
+        guard showsTenths else { return KhalaText.measurement(value, unit: unit) }
+        return KhalaText.tenths(value) + (unit ?? "")
+    }
 
     func call(value newValue: Double) -> KhalaServiceCall {
         KhalaServiceCall("number", "set_value", entityId: entityId, data: ["value": newValue])

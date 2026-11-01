@@ -43,6 +43,9 @@ struct KhalaControlModel: Identifiable, Equatable {
     /// False while Home Assistant reports the entity unavailable (or a lock's state is still unknown).
     var isAvailable = true
     var directions: Directions = .both
+    /// The entity's `device_class` (a garage door, a gate…): with the domain it decides what asks first
+    /// (`KhalaConfirmPolicy`), so the dialog shows exactly where `KhalaConfirmGate` demands it.
+    var deviceClass: String?
     /// The optimistic overlay; set by `showing(_:)`.
     var pending: KhalaPending?
 
@@ -54,12 +57,12 @@ struct KhalaControlModel: Identifiable, Equatable {
     var slot: String {
         switch kind {
         case .toggle: return "power"
-        case .slider: return "slider"
+        case let .slider(slider, _): return slider.slot
         case .stepper: return "value"
         case let .choice(_, _, field): return field.rawValue
         case .press: return "press"
         case .lock: return "lock"
-        case .commands: return "commands"
+        case let .commands(commands): return commands.contains(where: \.isTilt) ? "tiltCommands" : "commands"
         case .color: return "color"
         case let .flag(flag, _): return flag.rawValue
         }
@@ -120,14 +123,40 @@ extension KhalaControlModel {
         }
     }
 
-    /// The question to ask before `intent`, or nil to send it at once. Unlocking always asks; opening asks for a
-    /// control that declares it (a cover tile opens on `setOn(true)`).
+    /// The question to ask before `intent`, or nil to send it at once: what the control declares (the car's tiles
+    /// ask before opening any cover, as in 41.1), else what the entity's own data demands (`KhalaConfirmPolicy`:
+    /// unlocking or opening a lock, opening a garage door, a gate or a door by any route). `KhalaConfirmGate` asks
+    /// the same question again before any call goes out.
     func confirmation(for intent: KhalaIntent) -> KhalaConfirm? {
+        let intent = intent.unconfirmed
+        let position: Double? = {
+            if case let .slider(.position, value) = kind { return value }
+            return nil
+        }()
         switch (confirm, intent) {
         case (.unlock?, .unlock): return .unlock
-        case let (.open(deviceClass)?, .open), let (.open(deviceClass)?, .setOn(true)):
+        case let (.open(deviceClass)?, intent) where KhalaConfirmPolicy.opens(intent, from: position):
             return .open(deviceClass: deviceClass)
-        default: return nil
+        default:
+            return KhalaConfirmPolicy.required(intent, domain: domain, deviceClass: deviceClass, position: position)
+        }
+    }
+
+    /// Whether any of the control's directions asks first; such a control is drawn as a tile or a button that can
+    /// show the question, never as a bare switch.
+    var asksFirst: Bool {
+        let intents: [KhalaIntent] = [.setOn(true), .setOn(false), .unlock, .open, .command(.open)]
+        return intents.contains { confirmation(for: $0) != nil }
+    }
+
+    /// Whether one command of a `.commands` control can be sent now: open while the cover can still open, close
+    /// while it can still close (`directions`), the rest whenever the entity is available.
+    func isEnabled(_ command: KhalaCommand) -> Bool {
+        guard isAvailable else { return false }
+        switch command {
+        case .open: return directions.on
+        case .close: return directions.off
+        default: return true
         }
     }
 
@@ -179,6 +208,8 @@ extension KhalaControlModel {
             return (.locked(true), .state(["locked", "locking"]))
         case .unlock:
             return (.locked(false), .state(["unlocked", "unlocking", "open", "opening"]))
+        case let .confirmed(inner):
+            return pendingValue(for: inner)
         case .open:
             return domain == "lock"
                 ? (.locked(false), .state(["open", "opening", "unlocked"]))
@@ -190,6 +221,7 @@ extension KhalaControlModel {
             case .volume: return (.number(value), .attributeNumber("volume_level", value, tolerance: 0.011))
             case .brightness: return (.number(value), .attributeNumber("brightness", value * 2.55, tolerance: 3))
             case .position: return (.number(value), .attributeNumber("current_position", value, tolerance: 1))
+            case .tilt: return (.number(value), .attributeNumber("current_tilt_position", value, tolerance: 1))
             case .percentage: return (.number(value), .attributeNumber("percentage", value, tolerance: 1))
             case .colorTemp:
                 // Lights store mireds, so the kelvin they report back rarely matches to the unit.
@@ -218,6 +250,7 @@ extension KhalaControlModel {
         copy.stateText = stateText
         copy.isAvailable = isAvailable
         copy.directions = directions
+        copy.deviceClass = deviceClass
         copy.pending = pending
         return copy
     }

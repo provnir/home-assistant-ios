@@ -45,14 +45,19 @@ struct KhalaGoldenTests {
         #expect(KhalaGolden.matches("catalog-everything", KhalaGolden.devices(devices), """
         dev-rover | Rover | car | sensor.rover_battery_level | 65% | detected | device_tracker.rover_location,device_tracker.rover_route,lock.rover_lock,lock.rover_charge_cable_lock,sensor.rover_battery_level,sensor.rover_battery_range,sensor.rover_charging,sensor.rover_charger_power,sensor.rover_inside_temperature,sensor.rover_outside_temperature,number.rover_charge_limit,number.rover_charge_current,binary_sensor.rover_status,binary_sensor.rover_charge_cable,climate.rover_climate,switch.rover_sentry_mode,switch.rover_defrost,switch.rover_charge,switch.rover_auto_seat_climate_left,cover.rover_charge_port_door,cover.rover_frunk,cover.rover_trunk,button.rover_wake,button.rover_flash_lights,button.rover_honk_horn,button.rover_homelink,button.rover_play_sound,media_player.rover_media_player,select.rover_seat_heater_front_left,update.rover_update
         dev-cellar | Cellar tank | heat | water_heater.cellar_tank | 52° | detected | water_heater.cellar_tank
+        dev-loft | Loft heater | heat | climate.loft_heater | 19° | detected | climate.loft_heater
+        dev-ac | Study AC | heat | climate.study_ac | 26° | detected | climate.study_ac
         dev-den | Den | media | media_player.den_receiver | On | detected | media_player.den_receiver
+        dev-blue | Blue door | security | lock.blue_door | Locked | detected | lock.blue_door,sensor.blue_door_battery
+        dev-shed | Shed door | neutral | cover.shed_door | Open | detected | cover.shed_door
+        dev-gate | Side gate | neutral | cover.side_gate | Closed | detected | cover.side_gate
         dev-fan | Attic fan | neutral | fan.attic_fan | On | detected | fan.attic_fan
         dev-plug | Desk plug | neutral | switch.desk_plug | On | detected | switch.desk_plug,sensor.desk_plug_power
         entity:switch.other | Other | neutral | switch.other | Off | detected | switch.other
         dev-tank | Tank 9 | neutral | switch.tank_9 | On | detected | switch.tank_9,sensor.tank_9_remaining_time,sensor.tank_9_power
+        entity:light.lounge_lights | Lounge lights | sun | light.lounge_lights | On | detected | light.lounge_lights
         dev-lamp | Desk lamp | sun | light.desk_lamp | On | detected | light.desk_lamp
         dev-bulb | Hall bulb | sun | light.hall_bulb | Off | detected | light.hall_bulb
-        entity:light.lounge_lights | Lounge lights | sun | light.lounge_lights | On | detected | light.lounge_lights
         """))
     }
 
@@ -71,7 +76,10 @@ struct KhalaGoldenTests {
         pin:event.yard_field_detection | Yard Field detection | security | event.yard_field_detection | 2026-10-19T18:00:50.077+00:00 | pinned | camera.yard,event.yard_field_detection
         dev-rover | Rover | car | sensor.rover_battery_level | 72% | detected | device_tracker.rover_location,lock.rover_lock,sensor.rover_battery_level,switch.rover_defrost,media_player.rover_media,sensor.rover_time_to_full_charge
         dev-cellar | Cellar tank | heat | water_heater.cellar_tank | 52° | detected | water_heater.cellar_tank
+        dev-loft | Loft heater | heat | climate.loft_heater | 19° | detected | climate.loft_heater
         dev-den | Den | media | media_player.den_receiver | Off | detected | media_player.den_zone_2,media_player.den_receiver
+        dev-shed | Shed door | neutral | cover.shed_door | Open | detected | cover.shed_door
+        dev-gate | Side gate | neutral | cover.side_gate | Closed | detected | cover.side_gate
         dev-fan | Attic fan | neutral | fan.attic_fan | On | detected | fan.attic_fan
         dev-plug | Desk plug | neutral | switch.desk_plug | On | detected | switch.desk_plug,sensor.desk_plug_power
         dev-bulb | Hall bulb | sun | light.hall_bulb | Off | detected | light.hall_bulb
@@ -98,7 +106,10 @@ struct KhalaGoldenTests {
         everything: dev-rover, dev-cellar, dev-den
         camera.porch security
         camera.yard security
+        climate.loft_heater heat
         climate.study_ac heat
+        cover.shed_door neutral
+        cover.side_gate neutral
         device_tracker.phone car
         device_tracker.rover_location car
         event.porch_field_detection security
@@ -192,7 +203,10 @@ struct KhalaGoldenTests {
         pin:event.yard_field_detection -> screen camera(camera.yard)
         dev-rover -> screen device(dev-rover)
         dev-cellar -> screen device(dev-cellar)
+        dev-loft -> screen device(dev-loft)
         dev-den -> sheet dev-den media_player.den_receiver
+        dev-shed -> screen device(dev-shed)
+        dev-gate -> screen device(dev-gate)
         dev-fan -> screen device(dev-fan)
         dev-plug -> screen device(dev-plug)
         entity:switch.other -> screen device(entity:switch.other)
@@ -204,13 +218,13 @@ struct KhalaGoldenTests {
         light.lounge_ceiling -> screen entity(light.lounge_ceiling)
         light.lounge_floor -> screen entity(light.lounge_floor)
         light.lounge_shelf -> screen entity(light.lounge_shelf)
-        cover.shed_door -> screen entity(cover.shed_door)
-        cover.side_gate -> screen entity(cover.side_gate)
+        cover.shed_door -> screen device(dev-shed)
+        cover.side_gate -> screen device(dev-gate)
         lock.blue_door -> screen device(pin:lock.blue_door)
         sensor.blue_door_battery -> screen device(pin:lock.blue_door)
         fan.attic_fan -> screen device(dev-fan)
         climate.study_ac -> screen device(pin:climate.study_ac)
-        climate.loft_heater -> screen entity(climate.loft_heater)
+        climate.loft_heater -> screen device(dev-loft)
         vacuum.dust_bot -> screen device(pin:vacuum.dust_bot)
         water_heater.cellar_tank -> screen device(dev-cellar)
         switch.desk_plug -> screen device(dev-plug)

@@ -3,9 +3,9 @@ import Foundation
 /// The built-in descriptor table (DESCRIPTORS-DESIGN.md §1): one entry per kind, and the entity-level matching.
 /// Integration-specific knowledge is NOT here; it is data (the hints file, a later slice).
 ///
-/// `KhalaDeviceCatalog` detects lights, light groups, fans and switches through this table (slice 3); car, water
-/// heater and media still go through its own rules until slice 5, and climate, cover, lock and vacuum are not
-/// detected yet (slice 4/6).
+/// `KhalaDeviceCatalog` detects climate, locks, covers (slice 4), fans, light groups, lights and switches (slice 3)
+/// through this table; car, water heater and media still go through its own rules until slice 5, and vacuums are
+/// not detected yet (slice 6).
 enum KhalaDescriptors {
     static let generic = KhalaDescriptor(
         kind: .generic, accent: .neutral, match: KhalaMatch(domains: []), deviceRule: nil, primary: .none,
@@ -25,7 +25,7 @@ enum KhalaDescriptors {
         ),
         KhalaDescriptor(
             kind: .climate, accent: .heat, match: KhalaMatch(domains: ["climate"]), deviceRule: .face,
-            primary: .none, priority: 80, fallbackSymbol: "thermometer.medium"
+            primary: .none, priority: 80, fallbackSymbol: "thermometer.medium", template: .climate
         ),
         KhalaDescriptor(
             kind: .media, accent: .media, match: KhalaMatch(domains: ["media_player"]), deviceRule: .face,
@@ -37,11 +37,11 @@ enum KhalaDescriptors {
         ),
         KhalaDescriptor(
             kind: .lock, accent: .security, match: KhalaMatch(domains: ["lock"]), deviceRule: .face,
-            primary: .lock, priority: 55, fallbackSymbol: "lock"
+            primary: .lock, priority: 55, fallbackSymbol: "lock", template: .lock
         ),
         KhalaDescriptor(
             kind: .cover, accent: .neutral, match: KhalaMatch(domains: ["cover"]), deviceRule: .face,
-            primary: .open, priority: 50, fallbackSymbol: "blinds.horizontal.closed"
+            primary: .open, priority: 50, fallbackSymbol: "blinds.horizontal.closed", template: .cover
         ),
         KhalaDescriptor(
             kind: .fan, accent: .neutral, match: KhalaMatch(domains: ["fan"]), deviceRule: .face,

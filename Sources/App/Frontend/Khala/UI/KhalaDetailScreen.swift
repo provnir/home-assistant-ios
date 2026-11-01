@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The native screen for a destination that isn't one of the menu's own (`KhalaDestination.camera/.device/.entity`):
 /// picks the designed screen for the device's role — car, hot water — or the template screen (`KhalaTemplateScreen`:
-/// lights, fans, switches and everything else).
+/// lights, fans, climate, covers, locks, switches and everything else).
 struct KhalaDetailScreen: View {
     let destination: KhalaDestination
     let server: Server
@@ -42,6 +42,11 @@ struct KhalaDetailScreen: View {
                         calendar: home.calendar,
                         onMedia: { entityId in shell.route(.mediaSheet(deviceId: device.id, entityId: entityId)) }
                     )
+                case .heat where device.kind == .climate:
+                    // A detected air conditioner or heater: the climate template (slice 4). Pins keep their role's
+                    // screen, as in 41.1.
+                    template(device.name, category: device.category, primary: device.primaryEntityId,
+                             members: device.memberEntityIds, actions: actions)
                 case .heat:
                     KhalaWaterView(
                         device: device,

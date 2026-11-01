@@ -39,9 +39,11 @@ final class KhalaPendingStore: ObservableObject {
         guard let entity = live.entitiesById[model.entityId],
               let call = KhalaUpstreamBridge.call(
                   for: intent,
+                  on: model,
                   entity: entity,
                   attributes: live.attributes[model.entityId] ?? [:]
               ) else {
+            // No service, or an unlock / opening without its confirmation (`KhalaConfirmGate`).
             Current.Log.info("Khala: no service for \(intent) on \(model.entityId)")
             return false
         }

@@ -1,7 +1,7 @@
 import Foundation
 
-/// The screen a kind gets (DESCRIPTORS-DESIGN.md §3): a hero on top, then sections. Only the parts slice 3 draws are
-/// here; climate, cover, lock and vacuum heroes join with their slices. Car, water heater and cameras keep their
+/// The screen a kind gets (DESCRIPTORS-DESIGN.md §3): a hero on top, then sections. Lights and fans came with slice
+/// 3, climate, covers and locks with slice 4; the vacuum hero joins with its slice. Car, water heater and cameras keep their
 /// bespoke screens and are not described by a template yet.
 struct KhalaTemplateSpec: Equatable {
     enum Hero: Equatable {
@@ -11,6 +11,12 @@ struct KhalaTemplateSpec: Equatable {
         case light
         /// Power, speed (snapping to the fan's step), oscillation, direction and preset as the fan supports them.
         case fan
+        /// Target stepper, HVAC mode, then fan mode, preset and swing as the climate supports them.
+        case climate
+        /// Open / Stop / Close, position and tilt as the cover supports them; opening a way in asks first.
+        case cover
+        /// Lock / Unlock…, and Open… when the lock can pull its latch; unlocking and opening always ask.
+        case lock
     }
 
     enum Section: Equatable {
@@ -31,4 +37,7 @@ struct KhalaTemplateSpec: Equatable {
     static let generic = KhalaTemplateSpec(hero: .status, sections: [.controls, .readings, .attributes])
     static let light = KhalaTemplateSpec(hero: .light, sections: [.members, .controls, .readings, .attributes])
     static let fan = KhalaTemplateSpec(hero: .fan, sections: [.controls, .readings, .attributes])
+    static let climate = KhalaTemplateSpec(hero: .climate, sections: [.controls, .readings, .attributes])
+    static let cover = KhalaTemplateSpec(hero: .cover, sections: [.controls, .readings, .attributes])
+    static let lock = KhalaTemplateSpec(hero: .lock, sections: [.controls, .readings, .attributes])
 }

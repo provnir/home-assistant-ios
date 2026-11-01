@@ -23,7 +23,7 @@ struct KhalaNumberStepper: View {
                 Spacer(minLength: 8)
             }
             roundButton(.minus, enabled: shown > setting.minimum) { step(-1) }
-            Text(KhalaText.measurement(shown, unit: setting.unit))
+            Text(setting.text(shown))
                 .font(large ? KhalaTheme.stepperValueLarge : KhalaTheme.stepperValue)
                 .monospacedDigit()
                 .foregroundStyle(KhalaTheme.ink)

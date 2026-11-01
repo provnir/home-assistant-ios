@@ -21,4 +21,21 @@ enum KhalaIntent: Equatable {
     case open
     /// The hint's `timedOn {service, field}` decides the call (a boiler's timer), not code.
     case timedOn(minutes: Int)
+    /// `intent`, after the user answered its confirmation (unlocking, opening). Only the confirmation dialog
+    /// (`KhalaConfirming`) makes it; `KhalaConfirmGate` refuses an intent that needs one and arrives without it.
+    indirect case confirmed(KhalaIntent)
+}
+
+extension KhalaIntent {
+    /// The intent without its confirmation wrapper: what is actually asked for.
+    var unconfirmed: KhalaIntent {
+        if case let .confirmed(inner) = self { return inner.unconfirmed }
+        return self
+    }
+
+    /// Whether the user confirmed it.
+    var isConfirmed: Bool {
+        if case .confirmed = self { return true }
+        return false
+    }
 }

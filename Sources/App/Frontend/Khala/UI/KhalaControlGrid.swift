@@ -4,8 +4,8 @@ import SwiftUI
 /// The one control grid (DESCRIPTORS-DESIGN.md §2): every control on the car's tabs, the generic screen and the media
 /// sheet — and the light and fan panels and a group's member rows — is drawn here from `KhalaControlModel`s, with the optimistic overlay of `KhalaPendingStore` laid over each
 /// so a tap shows its new state at once. A tap or pick is handed back as an intent; the screen decides how to run it
-/// (the car wakes first). Controls that ask first (unlock, open) always go through a tile, whose confirmation sits
-/// on its own button. `extras` are trailing tiles the screen adds (the car's Media and More).
+/// (the car wakes first). Controls that ask first (unlock, open) are never a bare switch: a tile or a button carries
+/// the confirmation (`KhalaConfirmationModifier`), and `KhalaConfirmGate` refuses what arrives unconfirmed. `extras` are trailing tiles the screen adds (the car's Media and More).
 struct KhalaControlGrid<Extras: View>: View {
     let controls: [KhalaControlModel]
     var style: KhalaControlGridStyle = .tiles(columns: 3)
@@ -34,7 +34,7 @@ struct KhalaControlGrid<Extras: View>: View {
         case .card:
             VStack(spacing: 8) {
                 ForEach(shown) { control in
-                    if let isOn = control.toggleIsOn, control.confirm == nil {
+                    if let isOn = control.toggleIsOn, !control.asksFirst {
                         HStack {
                             KhalaTheme.image(control.symbol)
                                 .font(KhalaTheme.chipGlyph)
@@ -88,7 +88,7 @@ struct KhalaControlGrid<Extras: View>: View {
             VStack(alignment: .leading, spacing: 18) {
                 ForEach(shown) { control in
                     switch control.kind {
-                    case let .toggle(isOn) where control.confirm == nil:
+                    case let .toggle(isOn) where !control.asksFirst:
                         HStack {
                             Text(control.title)
                                 .font(KhalaTheme.rowTitle)

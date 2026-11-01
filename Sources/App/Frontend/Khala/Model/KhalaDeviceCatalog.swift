@@ -10,15 +10,19 @@ import Foundation
 ///   battery sensor when there is one, else where the tracker is.
 /// - **heat**: has a `water_heater`.
 /// - **media**: has a `media_player` (receivers and TVs preferred as the face).
-/// - **light, light group, fan, switch** (slice 3, through `KhalaDescriptors`): a device with none of the
-///   domains detection doesn't cover yet (climate, cover, lock, vacuum…) takes the kind of its best member —
-///   fan 45, light group 41, light 40, switch 10 — ties to the entity with no `translation_key`, then the lowest
-///   id. Only `switch` entities make a switch (helpers such as `input_boolean` stay off the menu, as in 41.1).
+/// - **climate, lock, cover, fan, light group, light, switch** (slices 3–4, through `KhalaDescriptors`): a device
+///   with none of the domains detection doesn't cover yet (vacuum, camera, alarm panel…) takes the kind of its best
+///   member — climate 80, lock 55, cover 50, fan 45, light group 41, light 40, switch 10 — ties to the entity with
+///   no `translation_key`, then the lowest id. So a garage opener with a light is a cover whose light is one of its
+///   controls, and an air conditioner with a display switch is a climate. Only `switch` entities make a switch
+///   (helpers such as `input_boolean` stay off the menu, as in 41.1).
 ///   A light that is a member of a listed light group is folded into the group's screen, not listed again.
 /// - **labels** (decision 2): an entity labelled `khala:hide` is left out of detection entirely; a
 ///   `khala:kind:<kind>` label makes its device that kind, before every rule above.
 /// Cameras are not listed (the menu counts them under Cameras). Pinned assignments come first, in the user's
-/// order, and take over the whole device they belong to; a pin beats every label.
+/// order, and take over the whole device they belong to; a pin beats every label. Detected devices follow by colour
+/// family (`KhalaCategory.chipPriority`), then kind priority (a water heater before an air conditioner, a light
+/// group before its lights), then name.
 enum KhalaDeviceCatalog {
     static func build(entities: [KhalaEntity], assignments: [KhalaRoleAssignment]) -> [KhalaDevice] {
         let groups = group(entities)
@@ -70,6 +74,9 @@ enum KhalaDeviceCatalog {
                 let lhsRank = KhalaCategory.chipPriority.firstIndex(of: lhs.category) ?? Int.max
                 let rhsRank = KhalaCategory.chipPriority.firstIndex(of: rhs.category) ?? Int.max
                 if lhsRank != rhsRank { return lhsRank < rhsRank }
+                let lhsPriority = lhs.kind.descriptor.priority
+                let rhsPriority = rhs.kind.descriptor.priority
+                if lhsPriority != rhsPriority { return lhsPriority > rhsPriority }
                 return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
         return pinned + detected
@@ -136,15 +143,14 @@ enum KhalaDeviceCatalog {
         return order.map { Group(key: $0, members: members[$0] ?? []) }
     }
 
-    /// Domains of devices detection doesn't cover yet (slice 4/6) or covers by its own rule (car, heater, media):
-    /// a light or switch on such a device is one of its features, not its face.
+    /// Domains of devices detection doesn't cover yet (slice 6) or covers by its own rule (car, heater, media):
+    /// a light, switch, cover, lock or climate on such a device is one of its features, not its face.
     private static let deferredDomains: Set<String> = [
-        "media_player", "climate", "lock", "device_tracker", "camera", "water_heater",
-        "vacuum", "cover", "alarm_control_panel", "lawn_mower",
+        "media_player", "device_tracker", "camera", "water_heater", "vacuum", "alarm_control_panel", "lawn_mower",
     ]
 
-    /// The kinds detected through descriptors in slice 3.
-    static let descriptorKinds: Set<KhalaKind> = [.fan, .lightGroup, .light, .switch]
+    /// The kinds detected through descriptors (slice 3: fans, lights, switches; slice 4: climate, locks, covers).
+    static let descriptorKinds: Set<KhalaKind> = [.climate, .lock, .cover, .fan, .lightGroup, .light, .switch]
 
     private static func detect(_ group: Group) -> KhalaDevice? {
         let domains = group.domains

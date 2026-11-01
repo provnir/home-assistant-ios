@@ -6,7 +6,7 @@ import Foundation
 struct KhalaTemplateLayout {
     /// How the hero is drawn.
     enum HeroStyle: Equatable {
-        /// A light's or fan's panel: power row, sliders, choices in one card.
+        /// A kind's panel (light, fan, climate, cover, lock): its rows in one card.
         case panel
         /// The generic Power card (glyph chip, title, switch).
         case powerCard
@@ -75,6 +75,24 @@ struct KhalaTemplateLayout {
             members = spec.sections.contains(.members) ? panel.members : []
         case .fan:
             let panel = KhalaFanPanel(entity: primary, attributes: faceAttributes)
+            subtitle = panel.subtitle
+            heroStyle = .panel
+            hero = panel.controls
+            members = []
+        case .climate:
+            let panel = KhalaClimatePanel(entity: primary, attributes: faceAttributes)
+            subtitle = panel.subtitle
+            heroStyle = .panel
+            hero = panel.controls
+            members = []
+        case .cover:
+            let panel = KhalaCoverPanel(entity: primary, attributes: faceAttributes)
+            subtitle = panel.subtitle
+            heroStyle = .panel
+            hero = panel.controls
+            members = []
+        case .lock:
+            let panel = KhalaLockPanel(entity: primary, attributes: faceAttributes)
             subtitle = panel.subtitle
             heroStyle = .panel
             hero = panel.controls

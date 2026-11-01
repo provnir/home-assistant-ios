@@ -34,7 +34,8 @@ struct KhalaMemberRow: View {
             }
             .buttonStyle(.plain)
             .disabled(onOpen == nil)
-            if let isOn = control.toggleIsOn {
+            // A member that asks first (a lock, a garage door) is opened, never switched from a row.
+            if let isOn = control.toggleIsOn, !control.asksFirst {
                 Toggle(control.title, isOn: Binding(get: { isOn }, set: { onIntent(.setOn($0)) }))
                     .labelsHidden()
                     .tint(KhalaTheme.accent(category))

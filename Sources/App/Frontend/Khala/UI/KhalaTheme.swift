@@ -128,11 +128,13 @@ enum KhalaTheme {
         }
     }
 
-    /// A device's glyph in the menu and on the Now card: its colour family's, except for the kinds slice 3 added
-    /// (a light is a bulb, not the sun it borrows its colour from; a fan is a fan).
+    /// A device's glyph in the menu and on the Now card: its colour family's, except for the kinds slices 3–4 added
+    /// (a light is a bulb, not the sun it borrows its colour from; a fan is a fan; a climate a thermometer, a cover
+    /// blinds, a lock a lock).
     static func symbol(_ device: KhalaDevice) -> SFSymbol {
         switch device.kind {
-        case .light, .lightGroup, .fan: return SFSymbol(rawValue: device.kind.descriptor.fallbackSymbol)
+        case .light, .lightGroup, .fan, .climate, .cover, .lock:
+            return SFSymbol(rawValue: device.kind.descriptor.fallbackSymbol)
         default: return symbol(device.category)
         }
     }

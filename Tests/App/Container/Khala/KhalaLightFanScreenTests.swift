@@ -25,7 +25,8 @@ struct KhalaLightFanScreenTests {
         let panel = KhalaLightPanel(entity: Kinds.deskLamp, attributes: Self.attributes(Kinds.deskLamp))
         #expect(panel.subtitle == "On · 70% · 2700 K")
         #expect(panel.controls.map(\.title) == ["Power", "Brightness", "Warmth"])
-        #expect(panel.controls.map(\.slot) == ["power", "slider", "slider"])
+        // Each slider is its own slot, so a brightness change never shows on the warmth slider.
+        #expect(panel.controls.map(\.slot) == ["power", "slider", "warmth"])
         #expect(panel.controls[0].kind == .toggle(isOn: true))
         #expect(panel.controls[1].kind == .slider(.brightness, value: 70))
         #expect(panel.controls[2].kind == .slider(.colorTemp(minKelvin: 2200, maxKelvin: 6500), value: 2700))
@@ -207,7 +208,8 @@ struct KhalaLightFanScreenTests {
         #expect(plug.readings.map(\.entityId) == ["sensor.desk_plug_power"])
 
         let lock = Self.layout(Kinds.blueDoor, members: [Kinds.blueDoor, Kinds.blueDoorBattery])
-        #expect(lock.heroStyle == .tile)
+        // Slice 4: a lock has its own panel.
+        #expect(lock.heroStyle == .panel)
         #expect(lock.hero.first?.kind == .lock(isLocked: true, canOpen: true))
 
         let sensor = Self.layout(Kinds.deskPlugPower)

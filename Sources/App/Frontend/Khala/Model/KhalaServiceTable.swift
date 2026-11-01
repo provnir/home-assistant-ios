@@ -4,7 +4,8 @@ import Shared
 /// Intent → service call (DESCRIPTORS-DESIGN.md §2, "Intent → service"), with service names from upstream
 /// `Service`. The parts only upstream `Domain` knows (which services toggle a domain, groups going through
 /// `homeassistant`, a domain's main action) come in as `KhalaUpstreamFacts` from the iOS bridge, so the table
-/// itself runs on Linux.
+/// itself runs on Linux. Controls reach it only through `KhalaConfirmGate`, which refuses an unconfirmed unlock or
+/// opening; a `.confirmed` intent handed straight to the table is refused.
 enum KhalaServiceTable {
     /// The call for `intent` on `entityId` in `state`, or nil when the entity can't do it.
     static func call(
@@ -46,6 +47,10 @@ enum KhalaServiceTable {
                 return domain == "light" ? make(.turnOn, ["brightness_pct": Int(clamp(value).rounded())]) : nil
             case .position:
                 return domain == "cover" ? make(.setCoverPosition, ["position": Int(clamp(value).rounded())]) : nil
+            case .tilt:
+                guard domain == "cover" else { return nil }
+                return KhalaServiceCall(domain, "set_cover_tilt_position", entityId: entityId,
+                                        data: ["tilt_position": Int(clamp(value).rounded())])
             case .percentage:
                 guard domain == "fan" else { return nil }
                 return make(.setPercentage, ["percentage": Int(slider.snapped(value))])
@@ -76,9 +81,12 @@ enum KhalaServiceTable {
         case let .choose(field, option):
             return choose(field, option, domain: domain, entityId: entityId)
         case let .command(command):
-            return self.command(command, domain: domain, make: { make($0) })
+            return self.command(command, domain: domain, entityId: entityId, make: { make($0) })
         case .timedOn:
             // A hint's `{service, field}` decides it (slice 5); the boiler screen still sends its own.
+            return nil
+        case .confirmed:
+            // Only `KhalaConfirmGate` unwraps a confirmed intent, after checking it.
             return nil
         }
     }
@@ -116,7 +124,7 @@ enum KhalaServiceTable {
         }
     }
 
-    private static func command(_ command: KhalaCommand, domain: String,
+    private static func command(_ command: KhalaCommand, domain: String, entityId: String,
                                 make: (Service) -> KhalaServiceCall) -> KhalaServiceCall? {
         switch (domain, command) {
         case ("vacuum", .start): return make(.start)
@@ -127,6 +135,10 @@ enum KhalaServiceTable {
         case ("cover", .open): return make(.openCover)
         case ("cover", .close): return make(.closeCover)
         case ("cover", .stop): return make(.stopCover)
+        case ("cover", .openTilt): return KhalaServiceCall("cover", "open_cover_tilt", entityId: entityId)
+        case ("cover", .closeTilt): return KhalaServiceCall("cover", "close_cover_tilt", entityId: entityId)
+        case ("cover", .stopTilt): return KhalaServiceCall("cover", "stop_cover_tilt", entityId: entityId)
+        case ("lock", .open): return make(.open)
         case ("valve", .open): return make(.openValve)
         case ("valve", .close): return make(.closeValve)
         default: return nil

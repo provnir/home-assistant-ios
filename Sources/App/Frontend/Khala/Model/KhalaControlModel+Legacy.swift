@@ -37,6 +37,7 @@ extension KhalaControlModel {
         stateText = control.stateText
         self.isAvailable = isAvailable
         self.directions = directions
+        deviceClass = entity.deviceClass
     }
 
     /// A device's main on/off switch (the generic screen's Power row).
@@ -45,6 +46,7 @@ extension KhalaControlModel {
                                       kind: .toggle(isOn: entity.state == "on"), confirm: nil)
         model.stateText = KhalaText.humanized(state: entity.state)
         model.isAvailable = entity.state != "unavailable"
+        model.deviceClass = entity.deviceClass
         return model
     }
 }

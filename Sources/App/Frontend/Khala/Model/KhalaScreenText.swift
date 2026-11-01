@@ -159,3 +159,48 @@ extension KhalaScreenText {
     /// "3 of 5 on"
     static func membersOn(_ on: Int, of count: Int) -> String { "\(on) of \(count) on" }
 }
+
+extension KhalaScreenText {
+    // Climate, cover and lock screens (slice 4).
+    static let mode = "Mode"
+    static let fanMode = "Fan"
+    static let swing = "Swing"
+    static let coverPosition = "Position"
+    static let tilt = "Tilt"
+    static let open = "Open"
+    static let lock = "Lock"
+    static let unlock = "Unlock"
+
+    /// "now 26°": the room's temperature beside what a climate is doing.
+    static func nowTemperature(_ text: String) -> String { "now \(text)" }
+
+    /// A command button's word.
+    static func command(_ command: KhalaCommand) -> String {
+        switch command {
+        case .open, .openTilt: return open
+        case .close, .closeTilt: return close
+        case .stop, .stopTilt: return stop
+        case .start: return start
+        case .pause: return "Pause"
+        case .returnHome: return "Home"
+        case .locate: return "Locate"
+        }
+    }
+
+    /// The confirmation's question ("Unlock blue door?", "Open shed door?") and its button ("Unlock", "Open"), for
+    /// the slice-4 heroes, whose controls carry the device's own name. The car's tiles keep 41.1's words
+    /// (`confirmTitle(_:control:)`).
+    static func confirmQuestion(_ confirm: KhalaConfirm, name: String) -> String {
+        switch confirm {
+        case .unlock: return "\(unlock) \(name)?"
+        case .open: return "\(open) \(name)?"
+        }
+    }
+
+    static func confirmButton(_ confirm: KhalaConfirm) -> String {
+        switch confirm {
+        case .unlock: return unlock
+        case .open: return open
+        }
+    }
+}

@@ -129,6 +129,12 @@ enum KhalaText {
         }
     }
 
+    /// "22.5", "22": at most one decimal, none when it is whole.
+    static func tenths(_ value: Double) -> String {
+        let rounded = (value * 10).rounded() / 10
+        return rounded == rounded.rounded() ? String(Int(rounded)) : String(format: "%.1f", rounded)
+    }
+
     /// "65%", "21°", "301 km", "0.5 kW".
     static func measurement(_ value: Double, unit: String?) -> String {
         let number = value.rounded() == value || abs(value) >= 100

@@ -35,10 +35,8 @@ struct KhalaLightFanDetectionTests {
         // Lights borrow the sun accent, the fan the neutral one (decision 3).
         #expect(byFace["light.desk_lamp"]?.accent == .sun)
         #expect(byFace["fan.attic_fan"]?.accent == .neutral)
-        // Covers, locks, climate and vacuums wait for their slices.
-        for face in ["cover.shed_door", "lock.blue_door", "climate.study_ac", "vacuum.dust_bot"] {
-            #expect(byFace[face] == nil, "\(face)")
-        }
+        // Vacuums wait for their slice (covers, locks and climate: `KhalaClimateCoverLockTests`).
+        #expect(byFace["vacuum.dust_bot"] == nil)
     }
 
     @Test func groupMembersFoldIntoTheirGroup() {
@@ -87,9 +85,9 @@ struct KhalaLightFanDetectionTests {
     }
 
     @Test func aLightOnADeviceDetectionDoesNotCoverYetStaysAFeature() {
-        let opener = Self.entity("cover.garage", "closed", device: "dev-garage")
-        let lamp = Self.entity("light.garage_lamp", "off", device: "dev-garage", translationKey: "light")
-        #expect(KhalaDeviceCatalog.build(entities: [opener, lamp], assignments: []).isEmpty)
+        let robot = Self.entity("vacuum.robot", "docked", device: "dev-robot")
+        let lamp = Self.entity("light.robot_lamp", "off", device: "dev-robot", translationKey: "light")
+        #expect(KhalaDeviceCatalog.build(entities: [robot, lamp], assignments: []).isEmpty)
     }
 
     @Test func helpersStayOffTheMenu() {

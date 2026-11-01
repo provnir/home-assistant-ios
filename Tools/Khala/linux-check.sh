@@ -53,6 +53,8 @@ let package = Package(
 SWIFT
 
 cd "$WORK"
+# The source scans (KhalaConfirmGateTests) read Model/ and UI/ from the repo itself.
+export KHALA_SOURCE_ROOT="$ROOT"
 swift test 2>&1 | grep -vE '^\[[0-9]+/[0-9]+\]' || exit 1
 if [[ $# -ge 1 ]]; then
   swift run -c debug KhalaDump "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")" 2>&1 | grep -vE '^\[[0-9]+/[0-9]+\]|^Building|^Build complete|^Compiling|^Linking'
