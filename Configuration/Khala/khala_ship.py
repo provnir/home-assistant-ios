@@ -63,6 +63,15 @@ APP_TARGET = "App"
 # need its own App ID, provisioning and, for several, Apple-approval entitlements.
 KEEP_PRODUCT_TYPES = {"com.apple.product-type.framework"}
 ASSOCIATED_DOMAINS = "com.apple.developer.associated-domains"
+# Upstream's "share a Matter device to Apple Home" (#5905) asks for HomeKit. Khala does not enable new
+# Apple capabilities on its App ID, so the entitlement is dropped: the share call then fails on the user's
+# tap and is reported to the frontend as an error (MatterWrapper.shareDevice); nothing calls HomeKit at launch.
+HOMEKIT = "com.apple.developer.homekit"
+DROPPED_ENTITLEMENTS = (ASSOCIATED_DOMAINS, HOMEKIT)
+# Shared now imports HomeKit, so the binaries link it and App Store processing may ask for its purpose
+# string (ITMS-90683). Upstream ships none; an unused one is harmless.
+HOMEKIT_PURPOSE = "NSHomeKitUsageDescription"
+HOMEKIT_PURPOSE_TEXT = "Add Matter devices from Home Assistant to the Home app."
 
 
 def fail(message):
@@ -392,7 +401,9 @@ def apply(args):
     entitlements_path = root / ENTITLEMENTS
     with entitlements_path.open("rb") as source:
         entitlements = plistlib.load(source)
-    entitlements.pop(ASSOCIATED_DOMAINS, None)
+    for key in DROPPED_ENTITLEMENTS:
+        if entitlements.pop(key, None) is not None:
+            print(f"- App entitlements no longer request {key}")
     with entitlements_path.open("wb") as out:
         plistlib.dump(entitlements, out, sort_keys=False)
 
@@ -401,6 +412,7 @@ def apply(args):
         info = plistlib.load(source)
     info["CFBundleDisplayName"] = DISPLAY_NAME
     info["CFBundleName"] = DISPLAY_NAME
+    info.setdefault(HOMEKIT_PURPOSE, HOMEKIT_PURPOSE_TEXT)
     with info_path.open("wb") as out:
         plistlib.dump(info, out, sort_keys=False)
 
@@ -428,6 +440,7 @@ def verify(args):
     with (root / ENTITLEMENTS).open("rb") as source:
         entitlements = plistlib.load(source)
     require(ASSOCIATED_DOMAINS not in entitlements, "applinks associated domains are still requested")
+    require(HOMEKIT not in entitlements, "HomeKit is still requested (Khala does not enable it on its App ID)")
     require(entitlements.get("com.apple.security.application-groups"),
             "App entitlements lost their app group (the app's database lives in it)")
 
@@ -436,6 +449,7 @@ def verify(args):
     require(info.get("CFBundleDisplayName") == DISPLAY_NAME and info.get("CFBundleName") == DISPLAY_NAME,
             "display name is not Khala")
     require(info.get("ITSAppUsesNonExemptEncryption") is False, "export-compliance key changed upstream")
+    require(info.get(HOMEKIT_PURPOSE), "HomeKit purpose string missing (Shared links HomeKit)")
 
     iconset = json.loads((root / APPICONSET / "Contents.json").read_text())
     for image in iconset["images"]:
@@ -448,7 +462,7 @@ def verify(args):
                     f"AppIcon.icon layer {layer['image-name']} is missing")
     summary(f"- Khala identity verified: team {args.team}, prefix {args.prefix}, display name {DISPLAY_NAME}, "
             f"App embeds frameworks only ({', '.join(kept)}), no Siri vocabulary for unsupported intents, "
-            "no applinks, Khala icon installed.")
+            "no applinks, no HomeKit entitlement, Khala icon installed.")
 
 
 # --- per-run xcodebuild inputs --------------------------------------------------------
@@ -930,6 +944,23 @@ def store_checks(ipa, app, names, info):
     return problems, checked
 
 
+def signed_entitlements(binary):
+    """Entitlements plists in a signed Mach-O's code signature (one per slice; empty when unsigned)."""
+    found = []
+    for match in re.finditer(rb"\xfa\xde\x71\x71", binary):  # CSMAGIC_EMBEDDED_ENTITLEMENTS
+        start = match.start()
+        if start + 8 > len(binary):
+            continue
+        length = struct.unpack_from(">I", binary, start + 4)[0]
+        body = binary[start + 8:start + length]
+        if body.lstrip().startswith(b"<?xml"):
+            try:
+                found.append(plistlib.loads(body))
+            except Exception:  # noqa: BLE001 - a stray byte match, not a signature blob
+                continue
+    return found
+
+
 def verify_ipa(args):
     with zipfile.ZipFile(args.ipa) as ipa:
         names = ipa.namelist()
@@ -940,6 +971,7 @@ def verify_ipa(args):
         info = plistlib.loads(ipa.read(app + "Info.plist"))
         nested = [n for n in names if n.startswith(app) and (n.startswith(app + "PlugIns/") or n.startswith(app + "Watch/"))]
         profile = ipa.read(app + "embedded.mobileprovision")
+        signed = signed_entitlements(ipa.read(app + info.get("CFBundleExecutable", "")))
         problems, checked = store_checks(ipa, app, names, info)
     require(not problems, "packaged app would be rejected by App Store processing:\n  "
             + "\n  ".join(problems))
@@ -956,6 +988,9 @@ def verify_ipa(args):
             "embedded profile is for a different app or team")
     require(not provision.get("ProvisionedDevices") and entitlements.get("get-task-allow") is not True,
             "embedded profile is not an App Store distribution profile")
+    require(signed, "main executable carries no signed entitlements")
+    for key in DROPPED_ENTITLEMENTS:
+        require(all(key not in e for e in signed), f"packaged app is signed with {key}, which Khala drops")
     summary(f"- Packaged IPA verified: {args.bundle_id} {args.version} ({args.build}), display name "
             f"{DISPLAY_NAME}, no extensions, App Store profile \"{provision.get('Name')}\".")
     summary(f"- App Store processing guards passed: {checked}.")
