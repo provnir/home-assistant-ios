@@ -39,6 +39,8 @@ struct KhalaVolumeSlider: View {
             )
         }
         .frame(height: 56)
+        // A drag on the track is the slider's, never the menu drawer's.
+        .khalaClaimsHorizontalDrags()
         .onChange(of: level) { _ in dragLevel = nil }
         .accessibilityElement()
         .accessibilityLabel(KhalaScreenText.volume.capitalized)

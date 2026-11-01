@@ -56,6 +56,9 @@ struct KhalaSubTabBar: View {
                     .frame(maxWidth: .infinity)
             }
             .frame(height: CGFloat(KhalaSubTabMetrics.barHeight))
+            // A swipe along the bar stays on it, as the system bar's scrubbing does (a `UITabBar` is excluded by
+            // the menu drawer on its own).
+            .khalaClaimsHorizontalDrags()
             .padding(.bottom, 8)
             .sensoryFeedbackIfAvailable(selection)
         }

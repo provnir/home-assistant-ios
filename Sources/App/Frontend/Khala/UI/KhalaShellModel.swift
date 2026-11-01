@@ -12,16 +12,25 @@ final class KhalaShellModel: ObservableObject {
     @Published var destination: KhalaDestination {
         didSet {
             applyStatusBarStyle()
-            applyFrontendCorners()
+            applyFrontendCorners(progress: drawer.progress)
         }
     }
 
+    /// Whether the menu drawer is open (or settling open). The card's motion follows it (`drawer`), so any code may
+    /// set it: a menu selection, a route, an external navigation. A drag that ends in the other state sets it too.
     @Published var isMenuOpen = false {
         didSet {
+            guard isMenuOpen != oldValue else { return }
+            drawer.setOpen(isMenuOpen)
             applyStatusBarStyle()
-            applyFrontendCorners()
+            // The card's content is hidden from VoiceOver while the menu is open, and comes back when it closes.
+            UIAccessibility.post(notification: .screenChanged, argument: nil)
         }
     }
+
+    /// The drawer's motion and gesture (`KhalaDrawer`). Not published: only the drawer's own views observe it, so a
+    /// frame of motion never re-renders the shell.
+    let drawer = KhalaDrawer()
 
     /// Routing (`KhalaShellModel+Routing`): the media sheet on display.
     @Published var sheet: KhalaSheetRequest?
@@ -87,8 +96,8 @@ final class KhalaShellModel: ObservableObject {
     var settingsLandingDeadline: Date?
     private var settingsRequest: AnyCancellable?
 
-    /// The frontend asked for the app's menu (the app's edge swipe on the web UI, bounced back as `sidebar/show`).
-    /// The view opens the drawer with its own animation.
+    /// The frontend asked for the app's menu (`sidebar/show`). The app's own leading-edge swipe no longer goes this
+    /// way while the shell is on (`takeLeadingEdge(from:)`): the drawer's pan tracks it natively.
     let menuRequests = PassthroughSubject<Void, Never>()
 
     let server: Server
@@ -113,6 +122,7 @@ final class KhalaShellModel: ObservableObject {
         // The frontend's own "Companion app" settings entry (see `ContainerView`'s `onShowSettings`).
         settingsRequest = KhalaShell.settingsRequests
             .sink { [weak self] in self?.show(.settings) }
+        connectDrawer()
     }
 
     /// Called by `FrontendView` while SwiftUI builds the web view, so nothing here may publish synchronously.
@@ -121,6 +131,7 @@ final class KhalaShellModel: ObservableObject {
     func attach(_ controller: WebViewController) {
         webViewController = controller
         cancellables.removeAll()
+        takeLeadingEdge(from: controller)
         controller.overlayState?.externalNavigationRequests
             .receive(on: DispatchQueue.main)
             .sink { [weak self] in
@@ -165,26 +176,6 @@ final class KhalaShellModel: ObservableObject {
         guard webViewController.statusBarStyleOverride != style else { return }
         webViewController.statusBarStyleOverride = style
         webViewController.setNeedsStatusBarAppearanceUpdate()
-    }
-
-    /// The web UI's card gets the drawer's rounded corners while the menu is open over it. Done on the web
-    /// view controller's own layer (a plain corner clip, settled with the drawer) rather than with a SwiftUI
-    /// mask, which would render the web view offscreen for as long as it is on screen.
-    private func applyFrontendCorners() {
-        guard let view = webViewController?.view else { return }
-        let radius = isMenuOpen && destination == .dashboards
-            ? CGFloat(KhalaDrawerMath.cardRadius)
-            : 0
-        guard view.layer.cornerRadius != radius else { return }
-        view.layer.cornerCurve = .continuous
-        if radius > 0 { view.layer.masksToBounds = true }
-        UIView.animate(
-            withDuration: KhalaDrawerMath.settleDuration,
-            animations: { view.layer.cornerRadius = radius },
-            completion: { _ in
-                if view.layer.cornerRadius == 0 { view.layer.masksToBounds = false }
-            }
-        )
     }
 
     /// Starts mirroring Home Assistant's sidebar into `dashboards` (once per shell).

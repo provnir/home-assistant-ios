@@ -48,6 +48,8 @@ struct KhalaLevelSlider: View {
             .allowsHitTesting(isEnabled)
         }
         .frame(height: 48)
+        // A drag on the track is the slider's, never the menu drawer's.
+        .khalaClaimsHorizontalDrags()
         .opacity(isEnabled ? 1 : 0.45)
         .onChange(of: value) { _ in dragValue = nil }
         .accessibilityElement()

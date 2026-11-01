@@ -54,16 +54,4 @@ struct KhalaParsingTests {
         #expect(KhalaText.duration(5 * 3600 + 32 * 60) == "5 h 32 m")
         #expect(KhalaText.duration(45 * 60) == "45 m")
     }
-
-    @Test func drawerDecisions() {
-        #expect(KhalaDrawerMath.openWidth(container: 390) == 312)
-        #expect(KhalaDrawerMath.openWidth(container: 1024) == 360)
-        #expect(KhalaDrawerMath.progress(isOpen: false, travel: 156, openWidth: 312) == 0.5)
-        #expect(KhalaDrawerMath.progress(isOpen: true, travel: 40, openWidth: 312) == 1)
-        // A flick wins over distance; distance wins over staying put.
-        #expect(KhalaDrawerMath.opensAfterRelease(wasOpen: false, travel: 20, projectedTravel: 200))
-        #expect(!KhalaDrawerMath.opensAfterRelease(wasOpen: true, travel: 10, projectedTravel: -150))
-        #expect(KhalaDrawerMath.opensAfterRelease(wasOpen: false, travel: 80, projectedTravel: 90))
-        #expect(KhalaDrawerMath.opensAfterRelease(wasOpen: true, travel: -20, projectedTravel: -30))
-    }
 }

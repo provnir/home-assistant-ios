@@ -23,9 +23,6 @@ struct KhalaShellView: View {
     @StateObject private var home: KhalaHomeViewModel
     @Environment(\.appSettingsPresenter) private var appSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.layoutDirection) private var layoutDirection
-    @State private var dragTravel: CGFloat = 0
-    @State private var isDragging = false
     @State private var searchFocusRequest = 0
     @State private var showsDeviceSettings = false
     @State private var showsAbout = false
@@ -70,18 +67,13 @@ struct KhalaShellView: View {
     /// and the screen card above. Everything that is ground — the menu's wash, the card's own ground, the card's
     /// rounded mask and its shadow plate — reaches the display's edges, behind the status bar and the home
     /// indicator; content (the menu's list, the screens, the menu button) stays inside the safe area.
+    ///
+    /// The card's motion is UIKit's (`KhalaDrawer`: one pan on the hosting view, a velocity-carrying spring); this
+    /// body only lays the pieces out. Only `KhalaDrawerStage` and `KhalaDrawerRounding` follow the motion, frame by
+    /// frame.
     private var drawer: some View {
         GeometryReader { proxy in
             let openWidth = CGFloat(KhalaDrawerMath.openWidth(container: Double(proxy.size.width)))
-            let sign: CGFloat = layoutDirection == .rightToLeft ? -1 : 1
-            let progress = CGFloat(KhalaDrawerMath.progress(
-                isOpen: shell.isMenuOpen,
-                travel: Double(dragTravel),
-                openWidth: Double(openWidth)
-            ))
-            let offset = progress * openWidth * sign
-            let radius = CGFloat(KhalaDrawerMath.cornerRadius(progress: Double(progress)))
-            let cardShape = RoundedRectangle(cornerRadius: radius, style: .continuous)
 
             ZStack(alignment: .topLeading) {
                 // The whole window, not just the panel's width: a corner of the moving card never exposes a
@@ -93,6 +85,8 @@ struct KhalaShellView: View {
                 menu
                     .frame(width: openWidth)
                     .accessibilityHidden(!shell.isMenuOpen)
+                    // VoiceOver's two-finger scrub closes the open menu.
+                    .accessibilityAction(.escape) { shell.setMenuOpen(false) }
                     // The media sheet (theater, speakers, a car's player) hangs off the menu, which is always
                     // mounted, so it opens over any screen — the web UI included.
                     .sheet(item: $shell.sheet) { request in
@@ -105,22 +99,12 @@ struct KhalaShellView: View {
                         )
                     }
 
-                // The card's edge shadow, on a plain shape so the moving card itself is never shadowed.
-                cardShape
-                    .fill(KhalaTheme.groundFlat)
-                    .shadow(
-                        color: KhalaTheme.shadow.opacity(0.16 * min(1, Double(progress) * 4)),
-                        radius: 13,
-                        x: -6 * sign,
-                        y: 2
-                    )
-                    .ignoresSafeArea()
-                    .offset(x: offset)
-                    .allowsHitTesting(false)
-
-                card(sign: sign, shape: cardShape)
-                    .offset(x: offset)
+                KhalaDrawerStage(drawer: shell.drawer) {
+                    card
+                }
             }
+            // The drawer's coordinate space and the hook its pan is installed through (touch-transparent).
+            .background(KhalaDrawerAnchor(drawer: shell.drawer).ignoresSafeArea())
         }
         .onAppear {
             KhalaShell.settingsListeners += 1
@@ -134,7 +118,7 @@ struct KhalaShellView: View {
             KhalaShell.settingsListeners -= 1
             home.stop()
         }
-        .onReceive(shell.menuRequests) { _ in settle(open: true) }
+        .onReceive(shell.menuRequests) { _ in shell.setMenuOpen(true) }
         .sheet(isPresented: $showsAbout) {
             NavigationStack {
                 AboutView()
@@ -227,102 +211,87 @@ struct KhalaShellView: View {
         )
     }
 
-    /// The screen card: the web frontend (always mounted), a native screen over it, the pinned menu button, and
-    /// the drawer's gesture layer.
-    private func card(sign: CGFloat, shape: RoundedRectangle) -> some View {
+    /// The screen card: the web frontend (always mounted), a native screen over it, the pinned menu button and,
+    /// while the menu is open, the catcher that closes it.
+    private var card: some View {
         ZStack(alignment: .topLeading) {
-            // Hidden, not removed, under a native screen: it stays mounted (deep links, notifications, the camera
-            // player) but its header can't show through the status-bar band or the card's rounded corners. Its
-            // own corners are rounded by the model on the UIKit layer while the menu is open over it — a SwiftUI
-            // mask here would re-render the web view offscreen on every frame it scrolls.
-            frontend
-                .opacity(shell.destination == .dashboards ? 1 : 0)
-                .accessibilityHidden(shell.destination != .dashboards)
+            ZStack(alignment: .topLeading) {
+                // Hidden, not removed, under a native screen: it stays mounted (deep links, notifications, the
+                // camera player) but its header can't show through the status-bar band or the card's rounded
+                // corners. Its own corners are rounded by the model on the UIKit layer while the card moves
+                // (`applyFrontendCorners`) — a SwiftUI mask here would re-render the web view offscreen on every
+                // frame it scrolls.
+                frontend
+                    .opacity(shell.destination == .dashboards ? 1 : 0)
+                    .accessibilityHidden(shell.destination != .dashboards)
 
-            if shell.destination != .dashboards {
-                ZStack {
-                    KhalaGround()
-                    nativeContent
-                }
-                // The mask reaches the display's edges, so the ground (and content scrolled under the bars) shows
-                // behind the status bar and the home indicator, and the rounded corners land on the display's own
-                // corners. A plain `clipShape` would cut the screen back to the safe area.
-                .mask {
-                    shape.ignoresSafeArea()
-                }
-                .transition(.opacity)
-            }
-
-            // Over the web UI: Khala's own header in place of the frontend's (hidden by `KhalaFrontendScript`),
-            // once the frontend is up — the stand-by screen covers everything before that.
-            // Over a settings page (or History, Logbook, ...) whose own toolbar the script lifted: Khala's page
-            // chrome — large title, search, tabs, "+" (`KhalaPageHeaderView`).
-            if showsDashboardHeader {
-                if let page = shell.pageHeader {
-                    KhalaPageHeaderView(
-                        header: page,
-                        pageId: shell.frontendState?.path ?? shell.frontendPath ?? "",
-                        onBack: { withAnimation(settleAnimation) { shell.goBackFromPage() } },
-                        onAction: { shell.perform($0) },
-                        onSearch: { shell.searchPage($0) },
-                        onTab: { shell.openPageTab($0) }
-                    )
-                    .transition(.opacity)
-                } else {
-                    KhalaDashboardHeaderView(
-                        header: shell.dashboardHeader,
-                        icons: shell.dashboardIcons,
-                        onBack: { shell.goBackInFrontend() },
-                        onDashboard: { shell.openDashboard($0) },
-                        onView: { view, prefix in shell.openView(view, prefix: prefix) },
-                        onAction: { shell.perform($0) }
-                    )
+                if shell.destination != .dashboards {
+                    KhalaDrawerRounding(drawer: shell.drawer) {
+                        ZStack {
+                            KhalaGround()
+                            nativeContent
+                        }
+                    }
                     .transition(.opacity)
                 }
-            }
 
-            // Pinned top-leading in the safe area, above the content and never part of its flow: the one leading
-            // control on every screen. Over the web UI the dashboards header swaps it for Back while the frontend
-            // is on a sub-page or dialog (the drawer stays one edge swipe away).
-            if shell.destination != .dashboards || (showsDashboardHeader && !showsBackInHeader) {
-                KhalaGlassButton(symbol: .sidebarLeft, accessibilityLabel: KhalaText.openMenu) {
-                    settle(open: true)
+                // Over the web UI: Khala's own header in place of the frontend's (hidden by `KhalaFrontendScript`),
+                // once the frontend is up — the stand-by screen covers everything before that.
+                // Over a settings page (or History, Logbook, ...) whose own toolbar the script lifted: Khala's page
+                // chrome — large title, search, tabs, "+" (`KhalaPageHeaderView`).
+                if shell.isWebScreen {
+                    if let page = shell.pageHeader {
+                        KhalaPageHeaderView(
+                            header: page,
+                            pageId: shell.frontendState?.path ?? shell.frontendPath ?? "",
+                            onBack: { withAnimation(settleAnimation) { shell.goBackFromPage() } },
+                            onAction: { shell.perform($0) },
+                            onSearch: { shell.searchPage($0) },
+                            onTab: { shell.openPageTab($0) }
+                        )
+                        .transition(.opacity)
+                    } else {
+                        KhalaDashboardHeaderView(
+                            header: shell.dashboardHeader,
+                            icons: shell.dashboardIcons,
+                            onBack: { shell.goBackInFrontend() },
+                            onDashboard: { shell.openDashboard($0) },
+                            onView: { view, prefix in shell.openView(view, prefix: prefix) },
+                            onAction: { shell.perform($0) }
+                        )
+                        .transition(.opacity)
+                    }
                 }
-                .padding(.leading, Self.menuButtonInset.leading)
-                .padding(.top, Self.menuButtonInset.top)
-                .transition(.opacity)
-            }
 
-            // One gesture layer for the whole drawer, so a drag never loses its view mid-way: a thin leading-edge
-            // strip while closed, the whole card while open (tap or drag to close). On a working web UI the web
-            // view owns its edges (the app's edge swipe reaches the menu through the frontend); while the
-            // frontend is loading or offline the strip stands in.
-            Color.clear
-                .contentShape(Rectangle())
-                .frame(width: shell.isMenuOpen ? nil : CGFloat(KhalaDrawerMath.edgeWidth))
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                .ignoresSafeArea()
-                .allowsHitTesting(
-                    shell.isMenuOpen || shell.destination != .dashboards || !shell.isFrontendReady
-                )
-                .onTapGesture {
-                    if shell.isMenuOpen { settle(open: false) }
+                // Pinned top-leading in the safe area, above the content and never part of its flow: the one
+                // leading control on every screen. Over the web UI the dashboards header swaps it for Back while
+                // the frontend is on a sub-page or dialog, and the leading-edge swipe goes Back too (`KhalaDrawer`).
+                if shell.destination != .dashboards || (shell.isWebScreen && !shell.showsBackInHeader) {
+                    KhalaGlassButton(symbol: .sidebarLeft, accessibilityLabel: KhalaText.openMenu) {
+                        shell.setMenuOpen(true)
+                    }
+                    .padding(.leading, Self.menuButtonInset.leading)
+                    .padding(.top, Self.menuButtonInset.top)
+                    .transition(.opacity)
                 }
-                .gesture(drawerDrag(sign: sign))
-                .accessibilityHidden(!shell.isMenuOpen)
-                .accessibilityLabel(KhalaText.closeMenu)
-                .accessibilityAddTraits(.isButton)
+            }
+            // While the menu is open it is the only thing VoiceOver reads, with the catcher below as its way out.
+            .accessibilityHidden(shell.isMenuOpen)
+
+            // While the menu is open the card's content takes no touches: a tap on the visible card closes the
+            // menu. Drags (here, on the menu, anywhere) are the drawer's pan, on the hosting view.
+            if shell.isMenuOpen {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .ignoresSafeArea()
+                    .onTapGesture { shell.setMenuOpen(false) }
+                    .accessibilityElement()
+                    .accessibilityLabel(KhalaText.closeMenu)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { shell.setMenuOpen(false) }
+                    .accessibilityAction(.escape) { shell.setMenuOpen(false) }
+            }
         }
-    }
-
-    private var showsDashboardHeader: Bool {
-        shell.destination == .dashboards && shell.isFrontendReady
-    }
-
-    /// The web UI's header shows Back in the leading slot (so the shell's menu button stays off).
-    private var showsBackInHeader: Bool {
-        if let page = shell.pageHeader { return page.back != .none }
-        return shell.dashboardHeader.showsBack
     }
 
     /// Where the shell pins the menu button inside the safe area. Native screens leave room for it above their
@@ -337,9 +306,9 @@ struct KhalaShellView: View {
                 timeline: home.timeline,
                 now: home.now,
                 calendar: home.calendar,
-                onMenu: { settle(open: true) },
+                onMenu: { shell.setMenuOpen(true) },
                 onSearch: {
-                    settle(open: true)
+                    shell.setMenuOpen(true)
                     searchFocusRequest += 1
                 },
                 onItem: { handle($0) },
@@ -353,7 +322,7 @@ struct KhalaShellView: View {
                 actions: KhalaScreenActions(server: server),
                 now: home.now,
                 calendar: home.calendar,
-                onMenu: { settle(open: true) },
+                onMenu: { shell.setMenuOpen(true) },
                 onCamera: { entityId in shell.show(.camera(entityId: entityId)) }
             )
         case .automations:
@@ -361,7 +330,7 @@ struct KhalaShellView: View {
                 title: KhalaText.automations,
                 message: KhalaText.automationsPending,
                 actionTitle: KhalaText.openAutomations,
-                onMenu: { settle(open: true) },
+                onMenu: { shell.setMenuOpen(true) },
                 action: { shell.openWebPath("/config/automation/dashboard") }
             )
         case .dashboards:
@@ -430,41 +399,11 @@ struct KhalaShellView: View {
 
     // MARK: - Drawer motion
 
+    /// What content changes made from the drawer (a menu selection, Back) animate with: the drawer's own settle
+    /// spring, or a short ease with Reduce Motion. The card's motion itself is `KhalaDrawer`'s.
     private var settleAnimation: Animation {
-        let points = KhalaDrawerMath.settleControlPoints
-        return reduceMotion
+        reduceMotion
             ? .easeInOut(duration: 0.2)
-            : .timingCurve(points.x1, points.y1, points.x2, points.y2, duration: KhalaDrawerMath.settleDuration)
-    }
-
-    private func settle(open: Bool) {
-        if open != shell.isMenuOpen {
-            UIImpactFeedbackGenerator(style: .light).impactOccurred()
-        }
-        withAnimation(settleAnimation) {
-            shell.isMenuOpen = open
-            dragTravel = 0
-        }
-        isDragging = false
-    }
-
-    private func drawerDrag(sign: CGFloat) -> some Gesture {
-        DragGesture(minimumDistance: 8, coordinateSpace: .global)
-            .onChanged { value in
-                if !isDragging {
-                    // Only a mostly horizontal drag is the drawer's; vertical ones belong to the content.
-                    guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                    isDragging = true
-                }
-                dragTravel = value.translation.width * sign
-            }
-            .onEnded { value in
-                guard isDragging else { return }
-                settle(open: KhalaDrawerMath.opensAfterRelease(
-                    wasOpen: shell.isMenuOpen,
-                    travel: Double(value.translation.width * sign),
-                    projectedTravel: Double(value.predictedEndTranslation.width * sign)
-                ))
-            }
+            : .spring(response: KhalaDrawerMath.settleDuration, dampingFraction: 1)
     }
 }
