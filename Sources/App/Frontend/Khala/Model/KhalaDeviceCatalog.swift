@@ -10,9 +10,15 @@ import Foundation
 ///   battery sensor when there is one, else where the tracker is.
 /// - **heat**: has a `water_heater`.
 /// - **media**: has a `media_player` (receivers and TVs preferred as the face).
-/// - **neutral**: a plain switchable thing — `switch` with none of the "bigger device" domains — e.g. a relay.
+/// - **light, light group, fan, switch** (slice 3, through `KhalaDescriptors`): a device with none of the
+///   domains detection doesn't cover yet (climate, cover, lock, vacuum…) takes the kind of its best member —
+///   fan 45, light group 41, light 40, switch 10 — ties to the entity with no `translation_key`, then the lowest
+///   id. Only `switch` entities make a switch (helpers such as `input_boolean` stay off the menu, as in 41.1).
+///   A light that is a member of a listed light group is folded into the group's screen, not listed again.
+/// - **labels** (decision 2): an entity labelled `khala:hide` is left out of detection entirely; a
+///   `khala:kind:<kind>` label makes its device that kind, before every rule above.
 /// Cameras are not listed (the menu counts them under Cameras). Pinned assignments come first, in the user's
-/// order, and take over the whole device they belong to.
+/// order, and take over the whole device they belong to; a pin beats every label.
 enum KhalaDeviceCatalog {
     static func build(entities: [KhalaEntity], assignments: [KhalaRoleAssignment]) -> [KhalaDevice] {
         let groups = group(entities)
@@ -44,9 +50,22 @@ enum KhalaDeviceCatalog {
             ))
         }
 
-        let detected = groups
+        let candidates = groups
             .filter { !claimedGroups.contains($0.key) }
-            .compactMap(detect)
+            .compactMap { group -> KhalaDevice? in
+                let shown = group.members.filter { !KhalaLabelOverride.isHidden($0) }
+                guard !shown.isEmpty else { return nil }
+                return detect(Group(key: group.key, members: shown))
+            }
+        // Lights already reachable through a listed group's members are not listed again.
+        let listed = pinned + candidates
+        let folded = Set(listed.flatMap { device -> [String] in
+            guard let face = entitiesById[device.primaryEntityId],
+                  face.domain == "light" || device.kind == .lightGroup else { return [] }
+            return face.groupMembers
+        })
+        let detected = candidates
+            .filter { !(($0.kind == .light) && folded.contains($0.primaryEntityId)) }
             .sorted { lhs, rhs in
                 let lhsRank = KhalaCategory.chipPriority.firstIndex(of: lhs.category) ?? Int.max
                 let rhsRank = KhalaCategory.chipPriority.firstIndex(of: rhs.category) ?? Int.max
@@ -85,7 +104,7 @@ enum KhalaDeviceCatalog {
     /// Visible `camera.*` entities, by name.
     static func cameras(in entities: [KhalaEntity]) -> [KhalaEntity] {
         entities
-            .filter { $0.domain == "camera" && !$0.isAuxiliary }
+            .filter { $0.domain == "camera" && !$0.isAuxiliary && !KhalaLabelOverride.isHidden($0) }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
@@ -117,15 +136,25 @@ enum KhalaDeviceCatalog {
         return order.map { Group(key: $0, members: members[$0] ?? []) }
     }
 
-    /// Domains that make a device more than "a switch": a switch on such a device is one of its features.
-    private static let primaryDomains: Set<String> = [
+    /// Domains of devices detection doesn't cover yet (slice 4/6) or covers by its own rule (car, heater, media):
+    /// a light or switch on such a device is one of its features, not its face.
+    private static let deferredDomains: Set<String> = [
         "media_player", "climate", "lock", "device_tracker", "camera", "water_heater",
-        "vacuum", "fan", "light", "cover", "alarm_control_panel", "lawn_mower",
+        "vacuum", "cover", "alarm_control_panel", "lawn_mower",
     ]
+
+    /// The kinds detected through descriptors in slice 3.
+    static let descriptorKinds: Set<KhalaKind> = [.fan, .lightGroup, .light, .switch]
 
     private static func detect(_ group: Group) -> KhalaDevice? {
         let domains = group.domains
         let visible = group.members.filter { !$0.isAuxiliary }
+
+        // A `khala:kind:<kind>` label beats the built-in rules.
+        let labelled = visible.compactMap { entity in KhalaLabelOverride.kind(of: entity).map { (entity, $0) } }
+        if let (face, kind) = best(labelled) {
+            return device(group, face: face, kind: kind, fallbackName: face.name)
+        }
 
         if domains.contains("device_tracker"), domains.contains("lock") || domains.contains("climate"),
            let face = group.first(domain: "sensor", where: { $0.deviceClass == "battery" && !$0.isAuxiliary })
@@ -142,11 +171,31 @@ enum KhalaDeviceCatalog {
             guard let face = preferred ?? players.sorted(by: { $0.entityId < $1.entityId }).first else { return nil }
             return device(group, face: face, kind: .media, fallbackName: face.name)
         }
-        if domains.isDisjoint(with: primaryDomains),
-           let plug = group.first(domain: "switch", where: { !$0.isAuxiliary }) {
-            return device(group, face: plug, kind: .switch, fallbackName: plug.name)
+        if domains.isDisjoint(with: deferredDomains) {
+            let faces = visible.compactMap { entity -> (KhalaEntity, KhalaKind)? in
+                let kind = KhalaDescriptors.shown(for: entity).kind
+                guard descriptorKinds.contains(kind), kind != .switch || entity.domain == "switch" else { return nil }
+                return (entity, kind)
+            }
+            if let (face, kind) = best(faces) {
+                return device(group, face: face, kind: kind, fallbackName: face.name)
+            }
         }
         return nil
+    }
+
+    /// The face among candidate (entity, kind) pairs: the highest kind priority, then the device's main entity (no
+    /// `translation_key`), then the lowest entity id.
+    private static func best(_ candidates: [(KhalaEntity, KhalaKind)]) -> (KhalaEntity, KhalaKind)? {
+        candidates.min { lhs, rhs in
+            let lhsPriority = lhs.1.descriptor.priority
+            let rhsPriority = rhs.1.descriptor.priority
+            if lhsPriority != rhsPriority { return lhsPriority > rhsPriority }
+            let lhsMain = lhs.0.translationKey == nil
+            let rhsMain = rhs.0.translationKey == nil
+            if lhsMain != rhsMain { return lhsMain }
+            return lhs.0.entityId < rhs.0.entityId
+        }
     }
 
     private static func device(

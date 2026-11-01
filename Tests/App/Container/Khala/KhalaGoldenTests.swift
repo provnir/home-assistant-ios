@@ -46,9 +46,13 @@ struct KhalaGoldenTests {
         dev-rover | Rover | car | sensor.rover_battery_level | 65% | detected | device_tracker.rover_location,device_tracker.rover_route,lock.rover_lock,lock.rover_charge_cable_lock,sensor.rover_battery_level,sensor.rover_battery_range,sensor.rover_charging,sensor.rover_charger_power,sensor.rover_inside_temperature,sensor.rover_outside_temperature,number.rover_charge_limit,number.rover_charge_current,binary_sensor.rover_status,binary_sensor.rover_charge_cable,climate.rover_climate,switch.rover_sentry_mode,switch.rover_defrost,switch.rover_charge,switch.rover_auto_seat_climate_left,cover.rover_charge_port_door,cover.rover_frunk,cover.rover_trunk,button.rover_wake,button.rover_flash_lights,button.rover_honk_horn,button.rover_homelink,button.rover_play_sound,media_player.rover_media_player,select.rover_seat_heater_front_left,update.rover_update
         dev-cellar | Cellar tank | heat | water_heater.cellar_tank | 52° | detected | water_heater.cellar_tank
         dev-den | Den | media | media_player.den_receiver | On | detected | media_player.den_receiver
+        dev-fan | Attic fan | neutral | fan.attic_fan | On | detected | fan.attic_fan
         dev-plug | Desk plug | neutral | switch.desk_plug | On | detected | switch.desk_plug,sensor.desk_plug_power
         entity:switch.other | Other | neutral | switch.other | Off | detected | switch.other
         dev-tank | Tank 9 | neutral | switch.tank_9 | On | detected | switch.tank_9,sensor.tank_9_remaining_time,sensor.tank_9_power
+        dev-lamp | Desk lamp | sun | light.desk_lamp | On | detected | light.desk_lamp
+        dev-bulb | Hall bulb | sun | light.hall_bulb | Off | detected | light.hall_bulb
+        entity:light.lounge_lights | Lounge lights | sun | light.lounge_lights | On | detected | light.lounge_lights
         """))
     }
 
@@ -68,7 +72,9 @@ struct KhalaGoldenTests {
         dev-rover | Rover | car | sensor.rover_battery_level | 72% | detected | device_tracker.rover_location,lock.rover_lock,sensor.rover_battery_level,switch.rover_defrost,media_player.rover_media,sensor.rover_time_to_full_charge
         dev-cellar | Cellar tank | heat | water_heater.cellar_tank | 52° | detected | water_heater.cellar_tank
         dev-den | Den | media | media_player.den_receiver | Off | detected | media_player.den_zone_2,media_player.den_receiver
+        dev-fan | Attic fan | neutral | fan.attic_fan | On | detected | fan.attic_fan
         dev-plug | Desk plug | neutral | switch.desk_plug | On | detected | switch.desk_plug,sensor.desk_plug_power
+        dev-bulb | Hall bulb | sun | light.hall_bulb | Off | detected | light.hall_bulb
         """))
     }
 
@@ -98,7 +104,9 @@ struct KhalaGoldenTests {
         event.porch_field_detection security
         event.porch_line_crossing security
         event.yard_field_detection security
+        fan.attic_fan neutral
         light.desk_lamp neutral
+        light.hall_bulb sun
         light.lounge_lights neutral
         lock.blue_door security
         lock.rover_lock car
@@ -185,11 +193,13 @@ struct KhalaGoldenTests {
         dev-rover -> screen device(dev-rover)
         dev-cellar -> screen device(dev-cellar)
         dev-den -> sheet dev-den media_player.den_receiver
+        dev-fan -> screen device(dev-fan)
         dev-plug -> screen device(dev-plug)
         entity:switch.other -> screen device(entity:switch.other)
         dev-tank -> screen device(dev-tank)
+        dev-bulb -> screen device(dev-bulb)
         light.desk_lamp -> screen device(pin:light.desk_lamp)
-        light.hall_bulb -> screen entity(light.hall_bulb)
+        light.hall_bulb -> screen device(dev-bulb)
         light.lounge_lights -> screen device(pin:light.lounge_lights)
         light.lounge_ceiling -> screen entity(light.lounge_ceiling)
         light.lounge_floor -> screen entity(light.lounge_floor)
@@ -198,7 +208,7 @@ struct KhalaGoldenTests {
         cover.side_gate -> screen entity(cover.side_gate)
         lock.blue_door -> screen device(pin:lock.blue_door)
         sensor.blue_door_battery -> screen device(pin:lock.blue_door)
-        fan.attic_fan -> screen entity(fan.attic_fan)
+        fan.attic_fan -> screen device(dev-fan)
         climate.study_ac -> screen device(pin:climate.study_ac)
         climate.loft_heater -> screen entity(climate.loft_heater)
         vacuum.dust_bot -> screen device(pin:vacuum.dust_bot)

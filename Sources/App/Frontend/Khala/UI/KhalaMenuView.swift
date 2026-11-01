@@ -14,6 +14,8 @@ struct KhalaMenuView: View {
     let cameraCount: Int
     let automationCount: Int
     let devices: [KhalaDevice]
+    /// Home Assistant's areas, for grouping a long DEVICES list (decision 1).
+    var areas: [KhalaArea] = []
     /// Whether the menu is revealed; closing it clears the search.
     let isOpen: Bool
     /// Bumped by the shell to put the cursor in the search field (Today's search button).
@@ -33,6 +35,8 @@ struct KhalaMenuView: View {
     let onSettings: () -> Void
 
     @State private var search = ""
+    /// Area sections the user folded away, by section id.
+    @State private var collapsed = Set<String>()
     @FocusState private var isSearchFocused: Bool
 
     var body: some View {
@@ -40,7 +44,7 @@ struct KhalaMenuView: View {
         let destinations = KhalaDestination.allCases.filter {
             query.isEmpty || $0.title.localizedCaseInsensitiveContains(query)
         }
-        let shownDevices = devices.filter { query.isEmpty || $0.name.localizedCaseInsensitiveContains(query) }
+        let deviceSections = KhalaMenuSection.sections(devices: devices, areas: areas, query: query)
         let shownDashboards = KhalaDashboard.matching(query, in: dashboards)
 
         VStack(alignment: .leading, spacing: 6) {
@@ -137,22 +141,29 @@ struct KhalaMenuView: View {
                     .padding(.top, 16)
                     .padding(.bottom, 4)
 
-                    if shownDevices.isEmpty {
+                    if deviceSections.isEmpty {
                         Text(KhalaText.noDevices)
                             .font(KhalaTheme.secondaryText)
                             .foregroundStyle(KhalaTheme.muted)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 8)
                     }
-                    ForEach(shownDevices) { device in
-                        KhalaMenuRow(
-                            title: device.name,
-                            symbol: KhalaTheme.symbol(device.category),
-                            symbolColor: KhalaTheme.accent(device.category),
-                            chipTint: KhalaTheme.tint(device.category),
-                            trailing: device.stateText
-                        ) {
-                            onDevice(device)
+                    ForEach(deviceSections) { section in
+                        if let title = section.title {
+                            areaHeader(title, section: section)
+                        }
+                        if !collapsed.contains(section.id) || section.title == nil {
+                            ForEach(section.devices) { device in
+                                KhalaMenuRow(
+                                    title: device.name,
+                                    symbol: KhalaTheme.symbol(device),
+                                    symbolColor: KhalaTheme.accent(device.category),
+                                    chipTint: KhalaTheme.tint(device.category),
+                                    trailing: device.stateText
+                                ) {
+                                    onDevice(device)
+                                }
+                            }
                         }
                     }
                 }
@@ -204,6 +215,42 @@ struct KhalaMenuView: View {
             .padding(.leading, 12)
             .padding(.top, 16)
             .padding(.bottom, 4)
+    }
+
+    /// An area's caption in a long DEVICES list: tap to fold it away (its device count shows while folded).
+    private func areaHeader(_ title: String, section: KhalaMenuSection) -> some View {
+        let isCollapsed = collapsed.contains(section.id)
+        return Button {
+            withAnimation(.easeOut(duration: 0.2)) {
+                if isCollapsed { collapsed.remove(section.id) } else { collapsed.insert(section.id) }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(title.uppercased())
+                    .font(KhalaTheme.caption)
+                    .kerning(1)
+                    .foregroundStyle(KhalaTheme.muted)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                if isCollapsed {
+                    Text("\(section.devices.count)")
+                        .font(KhalaTheme.menuTrailing)
+                        .foregroundStyle(KhalaTheme.muted)
+                }
+                Image(systemSymbol: .chevronDown)
+                    .font(KhalaTheme.smallGlyph)
+                    .foregroundStyle(KhalaTheme.muted)
+                    .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+            }
+            .padding(.leading, 12)
+            .padding(.trailing, 12)
+            .frame(minHeight: 32)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 8)
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityValue(isCollapsed ? "\(section.devices.count)" : "")
     }
 
     private func trailing(for destination: KhalaDestination) -> String? {

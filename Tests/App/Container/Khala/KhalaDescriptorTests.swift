@@ -111,7 +111,9 @@ struct KhalaDescriptorTests {
 
     @Test func detectedDevicesCarryTheirKind() {
         let devices = KhalaDeviceCatalog.build(entities: Kinds.everything, assignments: [])
-        #expect(devices.map(\.kind) == [.car, .waterHeater, .media, .switch, .switch, .switch])
+        // Slice 3: the fan and the lights join; the lounge members fold into their group.
+        #expect(devices.map(\.kind) == [.car, .waterHeater, .media, .fan, .switch, .switch, .switch, .light, .light,
+                                        .lightGroup])
         for device in devices {
             #expect(device.accent == device.kind.accent)
             #expect(device.category == device.accent)

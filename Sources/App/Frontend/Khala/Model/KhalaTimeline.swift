@@ -35,6 +35,8 @@ struct KhalaTimeline: Equatable {
         now: Date,
         calendar: Calendar
     ) -> KhalaTimeline {
+        // `khala:hide` keeps an entity off Today too (decision 2).
+        let entities = entities.filter { !KhalaLabelOverride.isHidden($0) }
         let startOfToday = calendar.startOfDay(for: now)
         let startOfTomorrow = calendar.date(byAdding: .day, value: 1, to: startOfToday)
             ?? startOfToday.addingTimeInterval(86400)

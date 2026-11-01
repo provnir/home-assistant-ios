@@ -143,3 +143,19 @@ enum KhalaScreenText {
         }
     }
 }
+
+extension KhalaScreenText {
+    // Light and fan screens (slice 3).
+    static let brightness = "Brightness"
+    static let warmth = "Warmth"
+    static let colour = "Colour"
+    static let allLights = "All lights"
+    static let speed = "Speed"
+    static let oscillate = "Oscillate"
+    static let direction = "Direction"
+    static let preset = "Preset"
+    static let groupMembers = "Members"
+
+    /// "3 of 5 on"
+    static func membersOn(_ on: Int, of count: Int) -> String { "\(on) of \(count) on" }
+}

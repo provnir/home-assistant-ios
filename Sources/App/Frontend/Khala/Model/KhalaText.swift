@@ -31,6 +31,8 @@ enum KhalaText {
     static let automationsPending = "Native automations are on the way. Until then they open in Home Assistant."
     static let openAutomations = "Open automations"
     static let devicesTitle = "Devices"
+    /// The menu section of devices with no Home Assistant area.
+    static let otherDevices = "Other"
     static let pinnedDevices = "Pinned devices"
     static let pinnedDevicesFooter = """
     Pinned devices come first in the menu and on the Now card. The role picks the glyph and colour; the label \

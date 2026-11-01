@@ -6,6 +6,8 @@ enum KhalaChoiceField: String, Hashable {
     case fanMode
     case presetMode
     case swingMode
+    /// A fan's `direction` (`forward` / `reverse`).
+    case direction
     /// `select` / `input_select` options.
     case option
     case source

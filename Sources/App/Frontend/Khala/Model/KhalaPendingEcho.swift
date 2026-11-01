@@ -12,6 +12,7 @@ enum KhalaPendingEcho: Equatable {
     case stateNumber(Double, tolerance: Double)
     case attributeNumber(String, Double, tolerance: Double)
     case attributeString(String, String)
+    case attributeBool(String, Bool)
     /// Nothing to wait for (a button press): the entry ends with Home Assistant's answer.
     case none
 
@@ -28,6 +29,7 @@ enum KhalaPendingEcho: Equatable {
             guard let number = KhalaValue.double(attributes[key]) else { return false }
             return abs(number - value) <= tolerance
         case let .attributeString(key, value): return KhalaValue.string(attributes[key]) == value
+        case let .attributeBool(key, value): return KhalaValue.bool(attributes[key]) == value
         case .none: return false
         }
     }
@@ -53,6 +55,7 @@ enum KhalaPendingEcho: Equatable {
         case .fanMode: return .attributeString("fan_mode", option)
         case .presetMode: return .attributeString("preset_mode", option)
         case .swingMode: return .attributeString("swing_mode", option)
+        case .direction: return .attributeString("direction", option)
         }
     }
 }

@@ -27,6 +27,8 @@ struct KhalaEntity: Equatable {
     let areaId: String?
     /// The registry's label ids (`khala_hide`, `khala_kind_light`… see `KhalaLabelOverride`).
     let labels: [String]
+    /// A group entity's members (`entity_id` in its attributes: a light group, a switch group); empty otherwise.
+    let groupMembers: [String]
 
     /// The state read as a timestamp (`event.*`, `sensor` with device class `timestamp`, `image.*`).
     let stateDate: Date?
@@ -68,6 +70,7 @@ struct KhalaEntity: Equatable {
         self.translationKey = translationKey
         self.areaId = areaId
         self.labels = labels
+        self.groupMembers = KhalaValue.list(attributes["entity_id"]).compactMap { $0 as? String }
 
         self.stateDate = Self.stateDate(domain: domain, state: state, attributes: attributes)
         self.eventType = domain == "event" ? KhalaValue.string(attributes["event_type"]) : nil

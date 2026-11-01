@@ -18,6 +18,8 @@ final class KhalaHomeViewModel: ObservableObject {
     @Published private(set) var now: Date
     /// Display names of every entity with a state, for the device settings list.
     @Published private(set) var entityNames: [String: String] = [:]
+    /// Home Assistant's areas, for grouping the menu's DEVICES (decision 1).
+    @Published private(set) var areas: [KhalaArea] = []
 
     let server: Server
     var calendar: Calendar { Current.calendar() }
@@ -199,6 +201,11 @@ final class KhalaHomeViewModel: ObservableObject {
             }
             registry = facts
             live.update(platforms: platforms, deviceModels: deviceModels)
+            // Grouping is a nicety: without areas the menu just stays one list.
+            let newAreas = ((try? AppArea.fetchAreas(for: serverId)) ?? []).map {
+                KhalaArea(id: $0.areaId, name: $0.name, sortOrder: $0.sortOrder)
+            }
+            if newAreas != areas { areas = newAreas }
         } catch {
             Current.Log.error("Khala: failed to read the registry for server \(serverId): \(error.localizedDescription)")
         }

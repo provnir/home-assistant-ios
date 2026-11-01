@@ -46,14 +46,26 @@ enum KhalaServiceTable {
                 return domain == "light" ? make(.turnOn, ["brightness_pct": Int(clamp(value).rounded())]) : nil
             case .position:
                 return domain == "cover" ? make(.setCoverPosition, ["position": Int(clamp(value).rounded())]) : nil
-            case let .percentage(step):
+            case .percentage:
                 guard domain == "fan" else { return nil }
-                let snapped = step > 0 ? (clamp(value) / step).rounded() * step : clamp(value)
-                return make(.setPercentage, ["percentage": Int(clamp(snapped).rounded())])
+                return make(.setPercentage, ["percentage": Int(slider.snapped(value))])
+            case .colorTemp:
+                guard domain == "light" else { return nil }
+                return make(.turnOn, ["color_temp_kelvin": Int(slider.snapped(value))])
             case .volume:
                 guard domain == "media_player" else { return nil }
                 let level = (min(1, max(0, value)) * 100).rounded() / 100
                 return KhalaServiceCall(domain, "volume_set", entityId: entityId, data: ["volume_level": level])
+            }
+        case let .setColor(hue, saturation):
+            guard domain == "light" else { return nil }
+            let color = [(min(360, max(0, hue)) * 10).rounded() / 10, (clamp(saturation) * 10).rounded() / 10]
+            return make(.turnOn, ["hs_color": color])
+        case let .setFlag(flag, isOn):
+            switch (domain, flag) {
+            case ("fan", .oscillate):
+                return KhalaServiceCall(domain, "oscillate", entityId: entityId, data: ["oscillating": isOn])
+            default: return nil
             }
         case let .setTemperature(value):
             guard domain == "climate" || domain == "water_heater" else { return nil }
@@ -94,6 +106,9 @@ enum KhalaServiceTable {
             guard domain == "climate" else { return nil }
             return KhalaServiceCall(domain, Service.setSwingMode.rawValue, entityId: entityId,
                                     data: ["swing_mode": option])
+        case .direction:
+            guard domain == "fan" else { return nil }
+            return KhalaServiceCall(domain, "set_direction", entityId: entityId, data: ["direction": option])
         case .presetMode:
             guard domain == "climate" || domain == "fan" else { return nil }
             return KhalaServiceCall(domain, Service.setPresetMode.rawValue, entityId: entityId,

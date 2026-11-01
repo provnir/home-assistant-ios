@@ -2,7 +2,7 @@ import SFSafeSymbols
 import SwiftUI
 
 /// The one control grid (DESCRIPTORS-DESIGN.md §2): every control on the car's tabs, the generic screen and the media
-/// sheet is drawn here from `KhalaControlModel`s, with the optimistic overlay of `KhalaPendingStore` laid over each
+/// sheet — and the light and fan panels and a group's member rows — is drawn here from `KhalaControlModel`s, with the optimistic overlay of `KhalaPendingStore` laid over each
 /// so a tap shows its new state at once. A tap or pick is handed back as an intent; the screen decides how to run it
 /// (the car wakes first). Controls that ask first (unlock, open) always go through a tile, whose confirmation sits
 /// on its own button. `extras` are trailing tiles the screen adds (the car's Media and More).
@@ -13,6 +13,8 @@ struct KhalaControlGrid<Extras: View>: View {
     @ObservedObject var pending: KhalaPendingStore
     /// Whether `extras` draws anything; the grid shows with no controls only then.
     var hasExtras = false
+    /// `.rows`: opens a row's own screen (a group member's); nil = rows don't open.
+    var onOpen: ((KhalaControlModel) -> Void)?
     let onIntent: (KhalaControlModel, KhalaIntent) -> Void
     @ViewBuilder var extras: () -> Extras
 
@@ -56,6 +58,31 @@ struct KhalaControlGrid<Extras: View>: View {
                         KhalaControlTile(control: control, category: category) { onIntent(control, $0) }
                     }
                 }
+            }
+        case .panel:
+            if !shown.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(shown) { control in
+                        KhalaPanelRow(control: control, category: category) { onIntent(control, $0) }
+                        if control.id != shown.last?.id { Divider() }
+                    }
+                }
+                .khalaCard(padding: 14, radius: 22)
+            }
+        case .rows:
+            if !shown.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(shown) { control in
+                        KhalaMemberRow(
+                            control: control,
+                            category: category,
+                            onIntent: { onIntent(control, $0) },
+                            onOpen: onOpen.map { open in { open(control) } }
+                        )
+                        if control.id != shown.last?.id { Divider() }
+                    }
+                }
+                .khalaCard(padding: 14, radius: 22)
             }
         case .sheet:
             VStack(alignment: .leading, spacing: 18) {
@@ -186,10 +213,11 @@ extension KhalaControlGrid where Extras == EmptyView {
         style: KhalaControlGridStyle = .tiles(columns: 3),
         category: KhalaCategory,
         pending: KhalaPendingStore,
+        onOpen: ((KhalaControlModel) -> Void)? = nil,
         onIntent: @escaping (KhalaControlModel, KhalaIntent) -> Void
     ) {
         self.init(controls: controls, style: style, category: category, pending: pending, hasExtras: false,
-                  onIntent: onIntent, extras: { EmptyView() })
+                  onOpen: onOpen, onIntent: onIntent, extras: { EmptyView() })
     }
 }
 

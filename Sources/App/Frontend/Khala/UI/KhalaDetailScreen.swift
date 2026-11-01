@@ -2,7 +2,8 @@ import Shared
 import SwiftUI
 
 /// The native screen for a destination that isn't one of the menu's own (`KhalaDestination.camera/.device/.entity`):
-/// picks the designed screen for the device's role — car, hot water — or the generic one.
+/// picks the designed screen for the device's role — car, hot water — or the template screen (`KhalaTemplateScreen`:
+/// lights, fans, switches and everything else).
 struct KhalaDetailScreen: View {
     let destination: KhalaDestination
     let server: Server
@@ -50,35 +51,54 @@ struct KhalaDetailScreen: View {
                         calendar: home.calendar
                     )
                 case .media, .security, .sun, .neutral:
-                    generic(device.name, category: device.category, primary: device.primaryEntityId,
-                            members: device.memberEntityIds, actions: actions)
+                    template(device.name, category: device.category, primary: device.primaryEntityId,
+                             members: device.memberEntityIds, actions: actions)
                 }
             } else {
-                generic(KhalaText.devicesTitle, category: .neutral, primary: "", members: [], actions: actions)
+                template(KhalaText.devicesTitle, category: .neutral, primary: "", members: [], actions: actions)
             }
         case let .entity(entityId):
-            generic(live.entitiesById[entityId]?.name ?? entityId, category: .neutral, primary: entityId,
-                    members: [entityId], actions: actions)
+            template(live.entitiesById[entityId]?.name ?? entityId, category: Self.category(ofEntity: entityId,
+                                                                                            live: live),
+                     primary: entityId, members: [entityId], actions: actions)
         case .today, .cameras, .automations, .dashboards, .settings:
             EmptyView()
         }
     }
 
-    private func generic(
+    private func template(
         _ title: String,
         category: KhalaCategory,
         primary: String,
         members: [String],
         actions: KhalaScreenActions
     ) -> some View {
-        KhalaGenericDeviceView(
+        KhalaTemplateScreen(
             title: title,
             category: category,
             primaryEntityId: primary,
             memberEntityIds: members,
             live: live,
             actions: actions,
-            calendar: home.calendar
+            calendar: home.calendar,
+            onOpenEntity: { entityId in
+                shell.route(KhalaRouting.target(
+                    forEntityId: entityId,
+                    entities: live.entities,
+                    devices: home.devices,
+                    automationConfigs: live.automationConfigs
+                ))
+            }
         )
+        // A member opened from its group gets a fresh screen, not the group's scroll position.
+        .id(primary)
+    }
+
+    /// A lone entity's colour: its kind's when it has a template of its own (a light is amber), else neutral as in
+    /// 41.1.
+    private static func category(ofEntity entityId: String, live: KhalaLiveStates) -> KhalaCategory {
+        guard let entity = live.entitiesById[entityId] else { return .neutral }
+        let descriptor = KhalaDescriptors.shown(for: entity, attributes: live.attributes[entityId])
+        return descriptor.template == .generic ? .neutral : descriptor.accent
     }
 }

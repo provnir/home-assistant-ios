@@ -1,8 +1,8 @@
 import Foundation
 
 /// A kind of thing Khala knows how to show (DESCRIPTORS-DESIGN.md §1): types are code (this, and the table in
-/// `KhalaDescriptors`); which entity is which is data. The controls recipe and the screen template join in later
-/// slices; slice 1 carries what detection, colour and ordering need.
+/// `KhalaDescriptors`); which entity is which is data. It carries what detection, colour, ordering and the
+/// template screen need; the controls recipe joins in a later slice.
 struct KhalaDescriptor: Equatable {
     let kind: KhalaKind
     let accent: KhalaAccent
@@ -14,4 +14,6 @@ struct KhalaDescriptor: Equatable {
     let priority: Int
     /// SF Symbol name, used only after the icon chain (registry icon, hint, HA's own icon resolution).
     let fallbackSymbol: String
+    /// The screen `KhalaTemplateScreen` draws for this kind (slice 3: lights and fans; the rest generic).
+    var template: KhalaTemplateSpec = .generic
 }

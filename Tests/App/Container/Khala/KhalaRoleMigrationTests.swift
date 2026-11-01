@@ -74,7 +74,9 @@ struct KhalaRoleMigrationTests {
         #expect(KhalaTestFixtures.home[0].labels.isEmpty)
         #expect(KhalaTestFixtures.home[0].translationKey == nil)
         let detected = KhalaDeviceCatalog.build(entities: [lamp, plug], assignments: [])
-        #expect(detected.map(\.areaId) == ["area_kitchen"])
+        // Slice 3 applies the `khala:kind:light` label: the lamp is detected too, after the plug.
+        #expect(detected.map(\.areaId) == ["area_kitchen", "area_study"])
+        #expect(detected.map(\.kind) == [.switch, .light])
         let pinned = KhalaDeviceCatalog.build(
             entities: [lamp, plug],
             assignments: [KhalaRoleAssignment(entityId: "light.reading", kind: .light, label: nil)]

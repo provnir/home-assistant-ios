@@ -9,7 +9,7 @@ struct KhalaDeviceChip: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 3) {
-                Image(systemSymbol: KhalaTheme.symbol(device.category))
+                Image(systemSymbol: KhalaTheme.symbol(device))
                     .font(.system(size: 17, weight: .medium))
                     .foregroundStyle(KhalaTheme.accent(device.category))
                 Text(device.stateText)

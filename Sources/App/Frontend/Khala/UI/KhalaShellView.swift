@@ -194,6 +194,7 @@ struct KhalaShellView: View {
             cameraCount: home.cameras.count,
             automationCount: home.automationCount,
             devices: home.devices,
+            areas: home.areas,
             isOpen: shell.isMenuOpen,
             searchFocusRequest: searchFocusRequest,
             dashboards: shell.dashboards,

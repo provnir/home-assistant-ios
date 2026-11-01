@@ -15,6 +15,10 @@ struct KhalaControlModel: Identifiable, Equatable {
         /// `canOpen` from `LockCapabilities.supportsOpen`.
         case lock(isLocked: Bool, canOpen: Bool)
         case commands([KhalaCommand])
+        /// A light's colour (hue 0...360, saturation 0...100), nil when it reports none (off, white mode).
+        case color(hue: Double?, saturation: Double?)
+        /// A second on/off setting beside the power (a fan's oscillation).
+        case flag(KhalaFlag, isOn: Bool)
     }
 
     /// Which way a two-way control (toggle, lock) can go: a frunk that only opens, a cover without close.
@@ -56,6 +60,8 @@ struct KhalaControlModel: Identifiable, Equatable {
         case .press: return "press"
         case .lock: return "lock"
         case .commands: return "commands"
+        case .color: return "color"
+        case let .flag(flag, _): return flag.rawValue
         }
     }
 
@@ -70,12 +76,13 @@ extension KhalaControlModel {
     var isActive: Bool {
         switch kind {
         case let .toggle(isOn): return isOn
+        case let .flag(_, isOn): return isOn
         case let .lock(isLocked, _): return isLocked
         case let .choice(current, _, _):
             guard let current else { return false }
             return !["off", "unavailable", "unknown"].contains(current)
         case .press, .commands: return pending != nil
-        case .slider, .stepper: return false
+        case .slider, .stepper, .color: return false
         }
     }
 
@@ -86,7 +93,7 @@ extension KhalaControlModel {
         case let .toggle(isOn): return isOn ? directions.off : directions.on
         case let .lock(isLocked, _): return isLocked ? directions.off : directions.on
         case let .choice(_, options, _): return !options.isEmpty
-        case .press, .slider, .stepper, .commands: return true
+        case .press, .slider, .stepper, .commands, .color, .flag: return true
         }
     }
 
@@ -99,7 +106,8 @@ extension KhalaControlModel {
         case let .toggle(isOn): return .setOn(!isOn)
         case let .lock(isLocked, _): return isLocked ? .unlock : .lock
         case .press: return .press
-        case .slider, .stepper, .choice, .commands: return nil
+        case let .flag(flag, isOn): return .setFlag(flag, !isOn)
+        case .slider, .stepper, .choice, .commands, .color: return nil
         }
     }
 
@@ -108,7 +116,7 @@ extension KhalaControlModel {
         switch kind {
         case let .slider(slider, _): return .set(slider, value)
         case .stepper: return domain == "climate" ? .setTemperature(value) : .setNumber(value)
-        case .toggle, .choice, .press, .lock, .commands: return nil
+        case .toggle, .choice, .press, .lock, .commands, .color, .flag: return nil
         }
     }
 
@@ -142,6 +150,11 @@ extension KhalaControlModel {
             shown = shown.with(kind: .stepper(setting.with(value: value)), stateText: setting.with(value: value).text)
         case let (.slider(slider, _), .number(value)):
             shown = shown.with(kind: .slider(slider, value: value), stateText: stateText)
+        case let (.flag(flag, _), .on(isOn)):
+            shown = shown.with(kind: .flag(flag, isOn: isOn),
+                               stateText: isOn ? KhalaScreenText.on : KhalaScreenText.off)
+        case let (.color, .color(hue, saturation)):
+            shown = shown.with(kind: .color(hue: hue, saturation: saturation), stateText: stateText)
         case let (.choice(_, options, field), .option(option)):
             shown = shown.with(
                 kind: .choice(current: option, options: options, field: field),
@@ -178,7 +191,15 @@ extension KhalaControlModel {
             case .brightness: return (.number(value), .attributeNumber("brightness", value * 2.55, tolerance: 3))
             case .position: return (.number(value), .attributeNumber("current_position", value, tolerance: 1))
             case .percentage: return (.number(value), .attributeNumber("percentage", value, tolerance: 1))
+            case .colorTemp:
+                // Lights store mireds, so the kelvin they report back rarely matches to the unit.
+                return (.number(value), .attributeNumber("color_temp_kelvin", value, tolerance: max(30, value * 0.02)))
             }
+        case let .setColor(hue, saturation):
+            // Lights round colours their own way; Home Assistant's answer ends it.
+            return (.color(hue: hue, saturation: saturation), .none)
+        case let .setFlag(flag, isOn):
+            return (.on(isOn), .attributeBool(flag.attribute, isOn))
         case let .setTemperature(value):
             return (.number(value), .attributeNumber("temperature", value, tolerance: 0.01))
         case let .setNumber(value):

@@ -3,8 +3,9 @@ import Foundation
 /// The built-in descriptor table (DESCRIPTORS-DESIGN.md §1): one entry per kind, and the entity-level matching.
 /// Integration-specific knowledge is NOT here; it is data (the hints file, a later slice).
 ///
-/// Slice 1 only defines the table and the matching, tested over synthetic fixtures; detection still runs through
-/// `KhalaDeviceCatalog`'s rules, which this table reproduces for the kinds detected today.
+/// `KhalaDeviceCatalog` detects lights, light groups, fans and switches through this table (slice 3); car, water
+/// heater and media still go through its own rules until slice 5, and climate, cover, lock and vacuum are not
+/// detected yet (slice 4/6).
 enum KhalaDescriptors {
     static let generic = KhalaDescriptor(
         kind: .generic, accent: .neutral, match: KhalaMatch(domains: []), deviceRule: nil, primary: .none,
@@ -44,15 +45,15 @@ enum KhalaDescriptors {
         ),
         KhalaDescriptor(
             kind: .fan, accent: .neutral, match: KhalaMatch(domains: ["fan"]), deviceRule: .face,
-            primary: .toggle, priority: 45, fallbackSymbol: "fanblades"
+            primary: .toggle, priority: 45, fallbackSymbol: "fanblades", template: .fan
         ),
         KhalaDescriptor(
             kind: .lightGroup, accent: .sun, match: KhalaMatch(domains: ["light"], requires: .entityGroup),
-            deviceRule: .face, primary: .toggle, priority: 41, fallbackSymbol: "lightbulb.2"
+            deviceRule: .face, primary: .toggle, priority: 41, fallbackSymbol: "lightbulb.2", template: .light
         ),
         KhalaDescriptor(
             kind: .light, accent: .sun, match: KhalaMatch(domains: ["light"]), deviceRule: .face,
-            primary: .toggle, priority: 40, fallbackSymbol: "lightbulb"
+            primary: .toggle, priority: 40, fallbackSymbol: "lightbulb", template: .light
         ),
         KhalaDescriptor(
             kind: .switch, accent: .neutral, match: KhalaMatch(domains: ["switch", "input_boolean"]),
@@ -82,5 +83,16 @@ enum KhalaDescriptors {
                 }
                 return lhs.priority < rhs.priority
             } ?? generic
+    }
+
+    /// The descriptor `entity` is shown with: its `khala:kind:<kind>` label when it has one, else the table's match.
+    /// Without raw attributes a group entity is still known by its members (`KhalaEntity.groupMembers`).
+    static func shown(for entity: KhalaEntity, attributes: [String: Any]? = nil) -> KhalaDescriptor {
+        if let kind = KhalaLabelOverride.kind(of: entity) { return kind.descriptor }
+        var attributes = attributes ?? [:]
+        if attributes["entity_id"] == nil, !entity.groupMembers.isEmpty {
+            attributes["entity_id"] = entity.groupMembers
+        }
+        return descriptor(for: entity, attributes: attributes)
     }
 }

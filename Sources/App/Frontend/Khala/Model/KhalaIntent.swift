@@ -7,6 +7,10 @@ enum KhalaIntent: Equatable {
     case setOn(Bool)
     case press
     case set(KhalaSlider, Double)
+    /// `light.turn_on` `hs_color`: hue 0...360, saturation 0...100.
+    case setColor(hue: Double, saturation: Double)
+    /// A second on/off setting beside the power (a fan's oscillation).
+    case setFlag(KhalaFlag, Bool)
     case setTemperature(Double)
     /// `number` / `input_number` `set_value`.
     case setNumber(Double)
