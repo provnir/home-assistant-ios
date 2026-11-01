@@ -117,7 +117,6 @@ struct KhalaDescriptorTests {
                                         .switch, .switch, .switch, .lightGroup, .light, .light])
         for device in devices {
             #expect(device.accent == device.kind.accent)
-            #expect(device.category == device.accent)
         }
     }
 

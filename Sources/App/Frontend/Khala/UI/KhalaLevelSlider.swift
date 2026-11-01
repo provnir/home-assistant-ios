@@ -10,7 +10,7 @@ struct KhalaLevelSlider: View {
     /// The value shown (pending included), in the slider's own unit; nil reads as the bottom of its range.
     let value: Double?
     let symbol: KhalaGlyph
-    let category: KhalaCategory
+    let category: KhalaAccent
     let title: String
     var isEnabled = true
     let onSet: (Double) -> Void

@@ -83,7 +83,7 @@ struct KhalaLightPanel: Equatable {
             var parts = [KhalaScreenText.on]
             if let brightness, capabilities.supportsBrightness { parts.append(KhalaSlider.brightness.text(brightness)) }
             if let kelvin = capabilities.colorTempKelvin, capabilities.supportsColorTemp {
-                parts.append(KhalaSlider.colorTemp(minKelvin: 0, maxKelvin: 1).text(kelvin))
+                parts.append(KhalaText.kelvin(kelvin))
             }
             subtitle = parts.joined(separator: " · ")
         } else {

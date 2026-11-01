@@ -20,7 +20,7 @@ struct KhalaTimelineItem: Equatable, Identifiable {
     let kind: Kind
     let title: String
     let subtitle: String?
-    let category: KhalaCategory
+    let category: KhalaAccent
     /// Before (or at) the moment the timeline was built. The Now row is neither past nor upcoming.
     let isPast: Bool
     /// The entity a tap opens (more-info, or the camera player for detections), if any.

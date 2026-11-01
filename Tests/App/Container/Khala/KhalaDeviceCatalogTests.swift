@@ -8,7 +8,7 @@ struct KhalaDeviceCatalogTests {
     @Test func detectsDevicesFromTheirEntities() {
         let devices = KhalaDeviceCatalog.build(entities: Fixtures.home, assignments: [])
         #expect(devices.map(\.name) == ["Rover", "Den", "Kitchen speaker", "Relay 7"])
-        #expect(devices.map(\.category) == [.car, .media, .media, .neutral])
+        #expect(devices.map(\.accent) == [.car, .media, .media, .neutral])
         #expect(devices.map(\.stateText) == ["72%", "Off", "Playing", "Off"])
     }
 
@@ -35,7 +35,7 @@ struct KhalaDeviceCatalogTests {
         let assignments = [KhalaRoleAssignment(entityId: "switch.relay_7", role: .heat, label: " Hot water ")]
         let devices = KhalaDeviceCatalog.build(entities: Fixtures.home, assignments: assignments)
         #expect(devices.first?.name == "Hot water")
-        #expect(devices.first?.category == .heat)
+        #expect(devices.first?.accent == .heat)
         #expect(devices.first?.isPinned == true)
         #expect(!devices.contains { $0.name == "Relay 7" })
     }

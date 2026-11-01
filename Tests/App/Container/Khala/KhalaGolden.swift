@@ -7,7 +7,7 @@ import Foundation
 enum KhalaGolden {
     static func device(_ device: KhalaDevice) -> String {
         [
-            device.id, device.name, device.category.rawValue, device.primaryEntityId, device.stateText,
+            device.id, device.name, device.accent.rawValue, device.primaryEntityId, device.stateText,
             device.isPinned ? "pinned" : "detected", device.memberEntityIds.joined(separator: ","),
         ].joined(separator: " | ")
     }

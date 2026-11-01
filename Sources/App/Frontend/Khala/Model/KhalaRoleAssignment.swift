@@ -6,7 +6,7 @@ import Foundation
 ///
 /// Storage stays readable both ways: it is written with the new `kind` (and `accent` when it differs from the
 /// kind's own) AND the legacy `role` string, so an older build still finds its pins; a pin stored before kinds
-/// existed (only `role`) is mapped by `KhalaCategory.kind(forDomain:)`. An unknown role reads as `neutral`
+/// existed (only `role`) is mapped by `KhalaAccent.kind(forDomain:)`. An unknown role reads as `neutral`
 /// instead of losing every pin.
 struct KhalaRoleAssignment: Codable, Equatable, Identifiable {
     var entityId: String
@@ -26,14 +26,14 @@ struct KhalaRoleAssignment: Codable, Equatable, Identifiable {
     }
 
     /// A pin from a legacy role, as the device settings' role picker still makes them.
-    init(entityId: String, role: KhalaCategory, label: String?) {
+    init(entityId: String, role: KhalaAccent, label: String?) {
         let kind = role.kind(forDomain: Self.domain(of: entityId))
         self.init(entityId: entityId, kind: kind, accent: role, label: label)
     }
 
     /// The role (colour family) the device settings picker shows and sets. Setting it picks the kind that role
     /// stands for on this entity's domain.
-    var role: KhalaCategory {
+    var role: KhalaAccent {
         get { accent ?? kind.accent }
         set {
             kind = newValue.kind(forDomain: Self.domain(of: entityId))
@@ -66,7 +66,7 @@ struct KhalaRoleAssignment: Codable, Equatable, Identifiable {
             self.init(entityId: entityId, kind: kind, accent: accent, label: label)
         } else {
             let role = try container.decode(String.self, forKey: .role)
-            self.init(entityId: entityId, role: KhalaCategory(rawValue: role) ?? .neutral, label: label)
+            self.init(entityId: entityId, role: KhalaAccent(rawValue: role) ?? .neutral, label: label)
         }
     }
 

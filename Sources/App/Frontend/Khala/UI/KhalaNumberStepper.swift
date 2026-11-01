@@ -6,7 +6,7 @@ import SwiftUI
 /// the sent value until Home Assistant's own takes over.
 struct KhalaNumberStepper: View {
     let setting: KhalaNumberSetting
-    let category: KhalaCategory
+    let category: KhalaAccent
     var large = false
     let onSet: (Double) -> Void
 

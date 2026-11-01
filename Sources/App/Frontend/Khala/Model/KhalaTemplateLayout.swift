@@ -47,11 +47,7 @@ struct KhalaTemplateLayout {
             .filter { $0 != primaryEntityId }
             .compactMap { entities[$0] }
             .filter { !$0.isAuxiliary && !KhalaLabelOverride.isHidden($0) }
-        let controls = others.compactMap { entity in
-            KhalaControl.make(entity, attributes: attributes[entity.entityId] ?? [:]).map {
-                KhalaControlModel($0, entity: entity, attributes: attributes[entity.entityId] ?? [:])
-            }
-        }
+        let controls = others.compactMap { KhalaControlModel.tile($0, attributes: attributes[$0.entityId] ?? [:]) }
         let controlIds = Set(controls.map(\.entityId))
         self.controls = spec.sections.contains(.controls) ? controls : []
         readings = spec.sections.contains(.readings) ? others.filter { !controlIds.contains($0.entityId) } : []
@@ -103,9 +99,9 @@ struct KhalaTemplateLayout {
             if Self.switchable.contains(primary.domain) {
                 heroStyle = .powerCard
                 hero = [.power(primary, title: KhalaScreenText.power, symbolName: powerSymbol)]
-            } else if let control = KhalaControl.make(primary, attributes: faceAttributes) {
+            } else if let tile = KhalaControlModel.tile(primary, attributes: faceAttributes) {
                 heroStyle = .tile
-                hero = [KhalaControlModel(control, entity: primary, attributes: faceAttributes)]
+                hero = [tile]
             } else {
                 heroStyle = .none
                 hero = []

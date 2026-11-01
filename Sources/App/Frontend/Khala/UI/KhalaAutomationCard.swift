@@ -4,7 +4,7 @@ import SwiftUI
 /// disables the automation itself, and its description or run length underneath.
 struct KhalaAutomationCard: View {
     let automation: KhalaDeviceAutomation
-    let category: KhalaCategory
+    let category: KhalaAccent
     /// Extra line, e.g. the next run on the Schedule tab.
     var detail: String?
     let onToggle: () -> Void

@@ -7,7 +7,7 @@ struct KhalaConfirmButton: View {
     let control: KhalaControlModel
     let intent: KhalaIntent
     let title: String
-    let category: KhalaCategory
+    let category: KhalaAccent
     var isEnabled = true
     /// Drawn filled in the accent (the main action of a hero).
     var prominent = false

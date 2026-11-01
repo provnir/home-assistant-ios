@@ -54,7 +54,7 @@ struct KhalaDetailScreen: View {
                         calendar: home.calendar
                     )
                 case .template, .mediaSheet, .camera:
-                    template(device.name, category: device.category, primary: device.primaryEntityId,
+                    template(device.name, category: device.accent, primary: device.primaryEntityId,
                              members: device.memberEntityIds, actions: actions)
                 }
             } else {
@@ -71,7 +71,7 @@ struct KhalaDetailScreen: View {
 
     private func template(
         _ title: String,
-        category: KhalaCategory,
+        category: KhalaAccent,
         primary: String,
         members: [String],
         actions: KhalaScreenActions
@@ -99,7 +99,7 @@ struct KhalaDetailScreen: View {
 
     /// A lone entity's colour: its kind's when it has a template of its own (a light is amber), else neutral as in
     /// 41.1.
-    private static func category(ofEntity entityId: String, live: KhalaLiveStates) -> KhalaCategory {
+    private static func category(ofEntity entityId: String, live: KhalaLiveStates) -> KhalaAccent {
         guard let entity = live.entitiesById[entityId] else { return .neutral }
         let descriptor = KhalaDescriptors.shown(for: entity, attributes: live.attributes[entityId])
         return descriptor.template == .generic ? .neutral : descriptor.accent

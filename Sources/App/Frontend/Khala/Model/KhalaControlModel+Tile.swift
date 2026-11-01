@@ -2,10 +2,21 @@ import Foundation
 import Shared
 
 extension KhalaControlModel {
-    /// The grid's model of a 41.1 tile (`KhalaControl`, still built by `KhalaCarLayout` and the generic screen until
-    /// slice 5 moves detection onto descriptors): same title, state, active look, enabled state and confirm
-    /// step, now driven by intents instead of a ready-made call. The glyph is the tile's own Khala glyph; a tile that
-    /// only has the generic one goes down `KhalaIconChain.tile` (cover device class, then HA's icon).
+    /// The grid's model of an entity's tile (`KhalaControl.make`, which the car layout and the template screen's
+    /// controls share): nil for domains that make no tile.
+    static func tile(
+        _ entity: KhalaEntity,
+        attributes: [String: Any],
+        hints: KhalaHints = .builtIn
+    ) -> KhalaControlModel? {
+        KhalaControl.make(entity, attributes: attributes, hints: hints).map {
+            KhalaControlModel($0, entity: entity, attributes: attributes)
+        }
+    }
+
+    /// The grid's model of a tile face (`KhalaControl`): same title, state, active look, enabled state and confirm
+    /// step, driven by intents instead of the face's ready-made call. The glyph is the tile's own Khala glyph; a tile
+    /// that only has the generic one goes down `KhalaIconChain.tile` (cover device class, then HA's icon).
     init(_ control: KhalaControl, entity: KhalaEntity, attributes: [String: Any]) {
         let kind: Kind
         var directions = Directions.both

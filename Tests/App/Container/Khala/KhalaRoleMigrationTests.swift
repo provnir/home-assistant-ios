@@ -83,17 +83,16 @@ struct KhalaRoleMigrationTests {
         )
         #expect(pinned.first?.areaId == "area_study")
         #expect(pinned.first?.kind == .light)
-        #expect(pinned.first?.category == .sun)
+        #expect(pinned.first?.accent == .sun)
     }
 
-    @Test func aLegacyDeviceInitialiserPicksTheRolesKind() {
-        let device = KhalaDevice(id: "b", name: "Hot water", category: .heat, primaryEntityId: "switch.b",
+    @Test func aLegacyRolePicksItsKindOnTheEntitysDomain() {
+        #expect(KhalaAccent.heat.kind(forDomain: "switch") == .waterHeater)
+        #expect(KhalaAccent.security.kind(forDomain: "lock") == .lock)
+        #expect(KhalaAccent.security.kind(forDomain: "camera") == .camera)
+        let device = KhalaDevice(id: "b", name: "Hot water", kind: .waterHeater, primaryEntityId: "switch.b",
                                  stateText: "Off", memberEntityIds: [], isPinned: true)
-        #expect(device.kind == .waterHeater)
-        #expect(device.category == .heat)
-        let door = KhalaDevice(id: "d", name: "Door", category: .security, primaryEntityId: "lock.d",
-                               stateText: "Locked", memberEntityIds: [], isPinned: true)
-        #expect(door.kind == .lock)
-        #expect(door.areaId == nil)
+        #expect(device.accent == .heat)
+        #expect(device.areaId == nil)
     }
 }

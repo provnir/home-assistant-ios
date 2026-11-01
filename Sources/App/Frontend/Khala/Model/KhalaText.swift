@@ -137,6 +137,11 @@ enum KhalaText {
         return rounded == rounded.rounded() ? String(Int(rounded)) : String(format: "%.1f", rounded)
     }
 
+    /// A colour temperature: "2700 K".
+    static func kelvin(_ value: Double) -> String {
+        "\(Int(value.rounded())) K"
+    }
+
     /// "65%", "21°", "301 km", "0.5 kW".
     static func measurement(_ value: Double, unit: String?) -> String {
         let number = value.rounded() == value || abs(value) >= 100

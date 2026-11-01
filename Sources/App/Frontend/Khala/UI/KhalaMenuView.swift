@@ -156,9 +156,9 @@ struct KhalaMenuView: View {
                             ForEach(section.devices) { device in
                                 KhalaMenuRow(
                                     title: device.name,
-                                    symbol: KhalaTheme.symbol(device.category),
-                                    symbolColor: KhalaTheme.accent(device.category),
-                                    chipTint: KhalaTheme.tint(device.category),
+                                    symbol: KhalaTheme.symbol(device.accent),
+                                    symbolColor: KhalaTheme.accent(device.accent),
+                                    chipTint: KhalaTheme.tint(device.accent),
                                     glyph: device.glyph,
                                     trailing: device.stateText
                                 ) {
@@ -273,11 +273,11 @@ struct KhalaMenuView: View {
         automationCount: 3,
         devices: [
             KhalaDevice(
-                id: "a", name: "Rover", category: .car, primaryEntityId: "sensor.a",
+                id: "a", name: "Rover", kind: .car, primaryEntityId: "sensor.a",
                 stateText: "72%", memberEntityIds: [], isPinned: false
             ),
             KhalaDevice(
-                id: "b", name: "Hot water", category: .heat, primaryEntityId: "switch.b",
+                id: "b", name: "Hot water", kind: .waterHeater, primaryEntityId: "switch.b",
                 stateText: "Off", memberEntityIds: [], isPinned: true
             ),
         ],

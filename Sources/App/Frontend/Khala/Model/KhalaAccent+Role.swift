@@ -1,24 +1,21 @@
 import Foundation
 
-/// The pre-descriptor name of `KhalaAccent`, kept as a thin alias while the screens move to `KhalaKind` and
-/// descriptors (DESCRIPTORS-DESIGN.md §4): a category is a colour family, and the user-facing *role* picker in the
-/// device settings still offers these families. The role helpers below are that legacy layer; each role maps to
+/// An accent as a *role*: the colour family the device settings' role picker offers. Role assignments persist these
+/// raw values (`KhalaRoleAssignment.role`), so a pin stored before kinds existed still decodes: each role maps to
 /// one kind (`kind(forDomain:)`), and the kind's default accent is the role again, so pins round-trip.
-typealias KhalaCategory = KhalaAccent
-
 extension KhalaAccent {
     /// The roles a user can give a device in the device settings, in display order.
-    static var assignableRoles: [KhalaCategory] {
+    static var assignableRoles: [KhalaAccent] {
         [.car, .heat, .media, .security, .neutral]
     }
 
     /// Order in which categories fill the Now card when nothing is pinned.
-    static var chipPriority: [KhalaCategory] {
+    static var chipPriority: [KhalaAccent] {
         [.car, .heat, .media, .security, .neutral]
     }
 
     /// A starting role for an entity the user just pinned, from its domain; the user can change it.
-    static func suggestedRole(forDomain domain: String) -> KhalaCategory {
+    static func suggestedRole(forDomain domain: String) -> KhalaAccent {
         switch domain {
         case "water_heater", "climate", "boiler": return .heat
         case "media_player", "remote": return .media

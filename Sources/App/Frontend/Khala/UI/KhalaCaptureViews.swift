@@ -23,7 +23,7 @@ struct KhalaCaptureViewerRequest: Equatable, Identifiable {
 /// placeholder. Nothing streams.
 struct KhalaCaptureThumbnail: View {
     let ref: KhalaCaptureRef?
-    let category: KhalaCategory
+    let category: KhalaAccent
     var cornerRadius: CGFloat = 14
 
     @Environment(\.khalaCaptures) private var captures

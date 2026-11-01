@@ -9,7 +9,7 @@ struct KhalaDeviceChip: View {
         Button(action: action) {
             VStack(spacing: 3) {
                 KhalaGlyphImage(glyph: device.glyph, pointSize: 17)
-                    .foregroundStyle(KhalaTheme.accent(device.category))
+                    .foregroundStyle(KhalaTheme.accent(device.accent))
                 Text(device.stateText)
                     .font(KhalaTheme.chipValue)
                     .foregroundStyle(KhalaTheme.ink)
@@ -23,7 +23,7 @@ struct KhalaDeviceChip: View {
             .padding(.horizontal, 6)
             .frame(maxWidth: .infinity)
             .frame(height: 78)
-            .background(KhalaTheme.tint(device.category), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .background(KhalaTheme.tint(device.accent), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -36,7 +36,7 @@ struct KhalaDeviceChip: View {
         device: KhalaDevice(
             id: "car",
             name: "Rover",
-            category: .car,
+            kind: .car,
             primaryEntityId: "sensor.rover_battery_level",
             stateText: "72%",
             memberEntityIds: [],

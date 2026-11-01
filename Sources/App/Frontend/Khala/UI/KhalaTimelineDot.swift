@@ -3,8 +3,8 @@ import SwiftUI
 /// A timeline dot: filled for what happened, outlined for what's coming, a larger ink dot with a halo for Now.
 struct KhalaTimelineDot: View {
     enum Style: Equatable {
-        case past(KhalaCategory)
-        case upcoming(KhalaCategory)
+        case past(KhalaAccent)
+        case upcoming(KhalaAccent)
         case now
     }
 

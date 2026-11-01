@@ -46,7 +46,7 @@ struct KhalaDeviceSettingsView: View {
                                 )
                             )
                             Picker(KhalaText.role, selection: $assignment.role) {
-                                ForEach(KhalaCategory.assignableRoles, id: \.self) { role in
+                                ForEach(KhalaAccent.assignableRoles, id: \.self) { role in
                                     Text(role.displayName).tag(role)
                                 }
                             }
@@ -93,7 +93,7 @@ struct KhalaDeviceSettingsView: View {
                 if !assignments.contains(where: { $0.entityId == entity.entityId }) {
                     assignments.append(KhalaRoleAssignment(
                         entityId: entity.entityId,
-                        role: KhalaCategory.suggestedRole(forDomain: entity.domain),
+                        role: KhalaAccent.suggestedRole(forDomain: entity.domain),
                         label: nil
                     ))
                 }

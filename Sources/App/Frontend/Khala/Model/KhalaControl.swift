@@ -54,7 +54,7 @@ extension KhalaControl {
     /// A tile for `entity`, or nil for domains that make no tile.
     static func make(_ entity: KhalaEntity, attributes: [String: Any], hints: KhalaHints = .builtIn) -> KhalaControl? {
         let title = entity.nameWithoutDevice
-        let glyph = glyph(for: entity, hints: hints)
+        let glyph = KhalaIconChain.tileGlyph(for: entity, hints: hints)
         // Only `unavailable` blocks a tap: buttons sit at `unknown` until first pressed.
         let unavailable = entity.state == "unavailable"
         switch entity.domain {
@@ -129,21 +129,6 @@ extension KhalaControl {
             )
         default:
             return nil
-        }
-    }
-
-    /// The glyph for an entity: a lock's state, else its hint's glyph (`KhalaHints`, keyed on platform and
-    /// translation key), else its device class and domain. Names and ids are never read.
-    static func glyph(for entity: KhalaEntity, hints: KhalaHints = .builtIn) -> Glyph {
-        if entity.domain == "lock" { return entity.state == "locked" ? .lock : .unlock }
-        if let glyph = hints.hint(for: entity)?.glyph { return glyph }
-        if entity.deviceClass == "window" { return .window }
-        switch entity.domain {
-        case "light": return .lights
-        case "fan", "climate": return .fan
-        case "button": return .button
-        case "switch": return .power
-        default: return .generic
         }
     }
 }

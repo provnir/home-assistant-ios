@@ -5,7 +5,7 @@ import UIKit
 /// light's hue and saturation; a pick is sent 300 ms after the picker stops moving, as one `light.turn_on`.
 struct KhalaColorControl: View {
     let control: KhalaControlModel
-    let category: KhalaCategory
+    let category: KhalaAccent
     let onIntent: (KhalaIntent) -> Void
 
     @State private var send: Task<Void, Never>?

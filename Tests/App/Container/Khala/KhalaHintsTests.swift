@@ -178,7 +178,7 @@ struct KhalaHintsTests {
         func route(_ pin: KhalaRoleAssignment) -> String {
             let devices = KhalaDeviceCatalog.build(entities: relay, assignments: [pin])
             return KhalaGolden.route(KhalaRouting.target(for: devices[0], cameras: []))
-                + " \(devices[0].kind.descriptor.route) \(devices[0].category.rawValue)"
+                + " \(devices[0].kind.descriptor.route) \(devices[0].accent.rawValue)"
         }
         #expect(route(pin) == "screen device(pin:switch.relay_7) template neutral")
         pin.showAs = .waterHeater
@@ -222,39 +222,86 @@ struct KhalaHintsTests {
 
     // MARK: - Source scans
 
-    /// The one place word matching on names is still allowed, until cameras move to hints with their slice: the
-    /// camera's notification switch for the Mute action (cameras keep their bespoke screens in slice 5).
-    private static let wordMatchingAllowed: Set<String> = ["Model/KhalaCameraCatalog.swift"]
+    /// The lines of Model allowed to read names, each for a reason that is not word matching, except the first.
+    /// Each must still be there (a stale allowance fails), so one is removed the day it isn't needed.
+    private static let nameReadingAllowed: [(file: String, fragment: String, reason: String)] = [
+        // Word matching, kept: the camera's Mute action turns off a notification switch on the camera's device.
+        // Home Assistant gives such a switch no device class and no translation key shared across camera
+        // integrations, so there is nothing language-free to match; without the words, Mute would disappear.
+        ("Model/KhalaCameraCatalog.swift", #"(entity.entityId + " " + entity.name).lowercased()"#, "camera mute"),
+        ("Model/KhalaCameraCatalog.swift", #"["notif", "push", "alert"].contains { text.contains($0) }"#,
+         "camera mute"),
+        // Name structure, not words: without registry data, an event entity belongs to the camera whose name starts
+        // its own ("Porch" + " Field detection"), the way Home Assistant composes entity names.
+        ("Model/KhalaCameraCatalog.swift", #"event.name.hasPrefix(camera.name + " ")"#, "registry-less pairing"),
+        ("Model/KhalaRouting.swift", #"event.name.hasPrefix($0.name + " ")"#, "registry-less pairing"),
+        ("Model/KhalaEntity.swift", "name.hasPrefix(deviceName)", "the entity name without its device's"),
+        // Search: what the user typed, matched against what the user sees.
+        ("Model/KhalaMenuSection.swift", "$0.name.localizedCaseInsensitiveContains(query)", "menu search"),
+        ("Model/KhalaDashboard.swift", "$0.title.localizedCaseInsensitiveContains(query)", "dashboard search"),
+    ]
 
+    /// No word matching on names or ids anywhere in Model (DESCRIPTORS-DESIGN.md §4 row 7): every file is scanned,
+    /// and only the lines in `nameReadingAllowed` may read a name.
     @Test func modelDoesNoWordMatchingOnNames() {
         let files = Self.sources(in: ["Model"])
         guard files.count > 80 else {
             Issue.record("Khala sources not found under \(Self.sourceRoot.path)")
             return
         }
-        // `has("…")` helpers, an id glued to a name to search words in, or a name/id searched for a substring.
-        let patterns = [
-            #"(?<!\.)\bhas\([^)]*""#,
-            #"func has\("#,
-            #"entityId\s*\+\s*" "\s*\+"#,
-            #"\.(name|entityId|friendlyName)(\.lowercased\(\))?\.(contains|range\(of)"#,
-            #"\b(text|name)\([^)]*\)\.contains\("#,
-        ].map { try! NSRegularExpression(pattern: $0) }
         var offenders: [String] = []
-        for file in files where !Self.wordMatchingAllowed.contains(file.name) {
+        var used = Set<Int>()
+        for file in files {
             for (number, line) in file.text.components(separatedBy: "\n").enumerated() {
                 let code = line.trimmingCharacters(in: .whitespaces)
                 if code.hasPrefix("//") { continue }
-                let range = NSRange(code.startIndex..., in: code)
-                if patterns.contains(where: { $0.firstMatch(in: code, range: range) != nil }) {
+                guard Self.flagged(code) else { continue }
+                if let allowed = Self.nameReadingAllowed.indices.first(where: {
+                    Self.nameReadingAllowed[$0].file == file.name && code.contains(Self.nameReadingAllowed[$0].fragment)
+                }) {
+                    used.insert(allowed)
+                } else {
                     offenders.append("\(file.name):\(number + 1): \(code)")
                 }
             }
         }
         #expect(offenders.isEmpty, "word matching on names:\n\(offenders.joined(separator: "\n"))")
-        // The allowance is real (so it is removed once it isn't needed).
-        let camera = files.first { $0.name == "Model/KhalaCameraCatalog.swift" }?.text ?? ""
-        #expect(camera.contains(#"entity.entityId + " " + entity.name"#))
+        for (index, allowance) in Self.nameReadingAllowed.enumerated() where !used.contains(index) {
+            Issue.record("stale allowance (\(allowance.reason)): \(allowance.file) \(allowance.fragment)")
+        }
+    }
+
+    /// The scan catches what it is for: 41.1-style rules on names are flagged.
+    @Test func theScanFlagsWordMatching() {
+        for code in [
+            #"entity.name.lowercased().contains("frunk")"#,
+            #"entity.entityId.hasSuffix("_seat_heater")"#,
+            #"["seat", "wheel"].contains { text.contains($0) }"#,
+            #"if has("steering") { return .wheel }"#,
+        ] {
+            #expect(Self.flagged(code), "\(code)")
+        }
+        #expect(!Self.flagged(#"entity.domain == "lock""#))
+    }
+
+    private static let wordMatching: [NSRegularExpression] = [
+        // `has("…")` helpers.
+        #"(?<!\.)\bhas\([^)]*""#,
+        #"func has\("#,
+        // An id glued to a name to search words in.
+        #"entityId\s*\+\s*" "\s*\+"#,
+        // A name or id searched for a substring, a prefix or a suffix.
+        #"\.(name|entityId|friendlyName)(\.lowercased\(\))?\.(contains|range\(of)"#,
+        #"\b(name|entityId|friendlyName|deviceName|title)(\.lowercased\(\))?\."#
+            + #"(hasPrefix|hasSuffix|contains|range\(of|localizedCaseInsensitiveContains|localizedStandardContains)\("#,
+        #"\b(text|name)\([^)]*\)\.contains\("#,
+        // A list of words searched for in a text.
+        #"\]\.contains\s*\{\s*\w+\.(contains|hasPrefix|hasSuffix)\(\$0\)"#,
+    ].map { try! NSRegularExpression(pattern: $0) }
+
+    private static func flagged(_ code: String) -> Bool {
+        let range = NSRange(code.startIndex..., in: code)
+        return wordMatching.contains { $0.firstMatch(in: code, range: range) != nil }
     }
 
     @Test func integrationNamesAreDataNotSwift() {

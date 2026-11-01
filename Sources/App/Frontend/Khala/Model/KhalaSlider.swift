@@ -56,7 +56,7 @@ enum KhalaSlider: Hashable {
     func text(_ value: Double) -> String {
         switch self {
         case .volume: return "\(Int((value * 100).rounded()))%"
-        case .colorTemp: return "\(Int(value.rounded())) K"
+        case .colorTemp: return KhalaText.kelvin(value)
         case .brightness, .position, .tilt, .percentage: return "\(Int(value.rounded()))%"
         }
     }

@@ -7,7 +7,7 @@ import SwiftUI
 /// its options as a pull-down (a vertical list, never a side-scroller).
 struct KhalaControlTile: View {
     let control: KhalaControlModel
-    let category: KhalaCategory
+    let category: KhalaAccent
     let onIntent: (KhalaIntent) -> Void
 
     @State private var asking: KhalaIntent?

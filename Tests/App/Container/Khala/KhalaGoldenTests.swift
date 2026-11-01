@@ -240,14 +240,14 @@ struct KhalaGoldenTests {
             "lock", "device_tracker", "switch", "light", "cover", "fan", "vacuum", "sensor", "button", "",
         ]
         var lines: [String] = []
-        lines.append("all: " + KhalaCategory.allCases.map(\.rawValue).joined(separator: ","))
-        lines.append("assignable: " + KhalaCategory.assignableRoles.map(\.rawValue).joined(separator: ","))
-        lines.append("chips: " + KhalaCategory.chipPriority.map(\.rawValue).joined(separator: ","))
-        for category in KhalaCategory.allCases {
+        lines.append("all: " + KhalaAccent.allCases.map(\.rawValue).joined(separator: ","))
+        lines.append("assignable: " + KhalaAccent.assignableRoles.map(\.rawValue).joined(separator: ","))
+        lines.append("chips: " + KhalaAccent.chipPriority.map(\.rawValue).joined(separator: ","))
+        for category in KhalaAccent.allCases {
             lines.append("\(category.rawValue) = \(category.displayName)")
         }
         for domain in domains {
-            lines.append("suggest \(domain) -> \(KhalaCategory.suggestedRole(forDomain: domain).rawValue)")
+            lines.append("suggest \(domain) -> \(KhalaAccent.suggestedRole(forDomain: domain).rawValue)")
         }
         #expect(KhalaGolden.matches("roles", lines.joined(separator: "\n"), """
         all: security,car,heat,media,sun,neutral
@@ -367,7 +367,7 @@ struct KhalaGoldenTests {
             Kinds.entity("select.boot_mode", "off"),
             Kinds.entity("number.climate_fan_speed", "3"),
         ]
-        let lines = entities.map { "\($0.entityId) \($0.state) -> \(KhalaControl.glyph(for: $0).rawValue)" }
+        let lines = entities.map { "\($0.entityId) \($0.state) -> \(KhalaIconChain.tileGlyph(for: $0).rawValue)" }
         #expect(KhalaGolden.matches("glyphs", lines.joined(separator: "\n"), """
         light.desk_lamp on -> lights
         light.hall_bulb off -> lights

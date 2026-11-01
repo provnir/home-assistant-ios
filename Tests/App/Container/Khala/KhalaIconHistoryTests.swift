@@ -77,7 +77,7 @@ struct KhalaIconHistoryTests {
         case .light, .lightGroup, .fan, .climate, .cover, .lock: return device.kind.descriptor.fallbackSymbol
         default: break
         }
-        switch device.category {
+        switch device.accent {
         case .security: return "video"
         case .car: return "car"
         case .heat: return "drop"

@@ -9,7 +9,7 @@ import SwiftUI
 struct KhalaControlGrid<Extras: View>: View {
     let controls: [KhalaControlModel]
     var style: KhalaControlGridStyle = .tiles(columns: 3)
-    let category: KhalaCategory
+    let category: KhalaAccent
     @ObservedObject var pending: KhalaPendingStore
     /// Whether `extras` draws anything; the grid shows with no controls only then.
     var hasExtras = false
@@ -211,7 +211,7 @@ extension KhalaControlGrid where Extras == EmptyView {
     init(
         controls: [KhalaControlModel],
         style: KhalaControlGridStyle = .tiles(columns: 3),
-        category: KhalaCategory,
+        category: KhalaAccent,
         pending: KhalaPendingStore,
         onOpen: ((KhalaControlModel) -> Void)? = nil,
         onIntent: @escaping (KhalaControlModel, KhalaIntent) -> Void

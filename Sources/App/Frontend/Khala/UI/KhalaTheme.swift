@@ -47,7 +47,7 @@ enum KhalaTheme {
         }
     }
 
-    static func accent(_ category: KhalaCategory) -> Color {
+    static func accent(_ category: KhalaAccent) -> Color {
         switch category {
         case .security: return dynamic(light: 0x4A6FA5, dark: 0x86A5D6)
         case .car: return dynamic(light: 0x2F8F83, dark: 0x5DC0B2)
@@ -58,7 +58,7 @@ enum KhalaTheme {
         }
     }
 
-    static func tint(_ category: KhalaCategory) -> Color {
+    static func tint(_ category: KhalaAccent) -> Color {
         switch category {
         case .security: return dynamic(light: 0xE6EDF7, dark: 0x243042)
         case .car: return dynamic(light: 0xE9F3F1, dark: 0x1E3532)
@@ -117,7 +117,7 @@ enum KhalaTheme {
 
     // MARK: - Glyphs
 
-    static func symbol(_ category: KhalaCategory) -> SFSymbol {
+    static func symbol(_ category: KhalaAccent) -> SFSymbol {
         switch category {
         case .security: return .video
         case .car: return .car

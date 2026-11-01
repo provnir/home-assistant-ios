@@ -158,15 +158,15 @@ struct KhalaTodayView: View {
     )
     let devices = [
         KhalaDevice(
-            id: "a", name: "Rover", category: .car, primaryEntityId: "sensor.a",
+            id: "a", name: "Rover", kind: .car, primaryEntityId: "sensor.a",
             stateText: "72%", memberEntityIds: [], isPinned: false
         ),
         KhalaDevice(
-            id: "b", name: "Hot water", category: .heat, primaryEntityId: "switch.b",
+            id: "b", name: "Hot water", kind: .waterHeater, primaryEntityId: "switch.b",
             stateText: "Off", memberEntityIds: [], isPinned: true
         ),
         KhalaDevice(
-            id: "c", name: "Theater", category: .media, primaryEntityId: "media_player.c",
+            id: "c", name: "Theater", kind: .media, primaryEntityId: "media_player.c",
             stateText: "Off", memberEntityIds: [], isPinned: false
         ),
     ]

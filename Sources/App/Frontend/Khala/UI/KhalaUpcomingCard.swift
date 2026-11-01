@@ -6,7 +6,7 @@ import SwiftUI
 struct KhalaUpcomingCard: View {
     let title: String
     let subtitle: String?
-    let category: KhalaCategory
+    let category: KhalaAccent
     let action: (() -> Void)?
 
     static let height: CGFloat = 68

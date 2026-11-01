@@ -51,7 +51,7 @@ struct KhalaCarLayoutTests {
 
     @Test func carMediaStaysOnTheCar() {
         let devices = KhalaDeviceCatalog.build(entities: KhalaScreenFixtures.car, assignments: [])
-        #expect(devices.map(\.category) == [.car])
+        #expect(devices.map(\.accent) == [.car])
         #expect(devices.first?.memberEntityIds.contains("media_player.rover_media_player") == true)
     }
 

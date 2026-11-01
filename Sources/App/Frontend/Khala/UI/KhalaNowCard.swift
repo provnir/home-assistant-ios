@@ -39,11 +39,11 @@ struct KhalaNowCard: View {
         headline: "21° and sunny · sunset in 5 h 32 m",
         chips: [
             KhalaDevice(
-                id: "a", name: "Rover", category: .car, primaryEntityId: "sensor.a",
+                id: "a", name: "Rover", kind: .car, primaryEntityId: "sensor.a",
                 stateText: "72%", memberEntityIds: [], isPinned: false
             ),
             KhalaDevice(
-                id: "b", name: "Hot water", category: .heat, primaryEntityId: "switch.b",
+                id: "b", name: "Hot water", kind: .waterHeater, primaryEntityId: "switch.b",
                 stateText: "Off", memberEntityIds: [], isPinned: true
             ),
         ],

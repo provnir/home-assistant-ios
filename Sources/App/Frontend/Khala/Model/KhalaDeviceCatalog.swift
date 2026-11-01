@@ -21,7 +21,7 @@ import Foundation
 ///   `khala:kind:<kind>` label makes its device that kind, before every rule above.
 /// Cameras are not listed (the menu counts them under Cameras). Pinned assignments come first, in the user's
 /// order, and take over the whole device they belong to; a pin beats every label. Detected devices follow by colour
-/// family (`KhalaCategory.chipPriority`), then kind priority (a water heater before an air conditioner, a light
+/// family (`KhalaAccent.chipPriority`), then kind priority (a water heater before an air conditioner, a light
 /// group before its lights), then name.
 enum KhalaDeviceCatalog {
     static func build(entities: [KhalaEntity], assignments: [KhalaRoleAssignment]) -> [KhalaDevice] {
@@ -72,8 +72,8 @@ enum KhalaDeviceCatalog {
         let detected = candidates
             .filter { !(($0.kind == .light) && folded.contains($0.primaryEntityId)) }
             .sorted { lhs, rhs in
-                let lhsRank = KhalaCategory.chipPriority.firstIndex(of: lhs.category) ?? Int.max
-                let rhsRank = KhalaCategory.chipPriority.firstIndex(of: rhs.category) ?? Int.max
+                let lhsRank = KhalaAccent.chipPriority.firstIndex(of: lhs.accent) ?? Int.max
+                let rhsRank = KhalaAccent.chipPriority.firstIndex(of: rhs.accent) ?? Int.max
                 if lhsRank != rhsRank { return lhsRank < rhsRank }
                 let lhsPriority = lhs.kind.descriptor.priority
                 let rhsPriority = rhs.kind.descriptor.priority
@@ -84,12 +84,12 @@ enum KhalaDeviceCatalog {
     }
 
     /// Up to `limit` devices for the Now card: everything pinned first, then the first device of each category in
-    /// `KhalaCategory.chipPriority` order, then whatever is left, so the card shows variety before repetition.
+    /// `KhalaAccent.chipPriority` order, then whatever is left, so the card shows variety before repetition.
     static func nowChips(from devices: [KhalaDevice], limit: Int = 3) -> [KhalaDevice] {
         var chips = Array(devices.filter(\.isPinned).prefix(limit))
-        for category in KhalaCategory.chipPriority where chips.count < limit {
-            guard !chips.contains(where: { $0.category == category }),
-                  let device = devices.first(where: { $0.category == category && !$0.isPinned }) else { continue }
+        for category in KhalaAccent.chipPriority where chips.count < limit {
+            guard !chips.contains(where: { $0.accent == category }),
+                  let device = devices.first(where: { $0.accent == category && !$0.isPinned }) else { continue }
             chips.append(device)
         }
         for device in devices where chips.count < limit && !chips.contains(device) {
@@ -99,11 +99,11 @@ enum KhalaDeviceCatalog {
     }
 
     /// The category of every entity that belongs to a listed device, for colouring automations by what they act on.
-    static func categoryByEntityId(_ devices: [KhalaDevice]) -> [String: KhalaCategory] {
-        var result: [String: KhalaCategory] = [:]
+    static func categoryByEntityId(_ devices: [KhalaDevice]) -> [String: KhalaAccent] {
+        var result: [String: KhalaAccent] = [:]
         for device in devices {
             for entityId in device.memberEntityIds where result[entityId] == nil {
-                result[entityId] = device.category
+                result[entityId] = device.accent
             }
         }
         return result

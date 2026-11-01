@@ -32,7 +32,7 @@ struct KhalaFanPanel: Equatable {
         let speed = isOn ? capabilities.speedPercentage.map(slider.snapped) : 0
         if capabilities.supportsSpeedPercentage {
             var control = KhalaControlModel(entityId: entity.entityId, title: KhalaScreenText.speed,
-                                            symbol: .sf("gauge.with.dots.needle.50percent"),
+                                            symbol: .sf(Self.speedSymbol),
                                             kind: .slider(slider, value: speed), confirm: nil)
             control.stateText = speed.map(slider.text) ?? ""
             control.isAvailable = available
@@ -76,5 +76,11 @@ struct KhalaFanPanel: Equatable {
         } else {
             subtitle = isOn ? KhalaScreenText.on : KhalaText.humanized(state: entity.state)
         }
+    }
+
+    /// The speed slider's glyph. The gauge needle is SF Symbols 5 (iOS 17); iOS 16 draws the speedometer.
+    static var speedSymbol: String {
+        if #available(iOS 17, macOS 14, *) { return "gauge.with.dots.needle.50percent" }
+        return "speedometer"
     }
 }

@@ -25,7 +25,7 @@ struct KhalaSubTabBar: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(tabs: [KhalaSubTab], selection: Binding<Int>, category: KhalaCategory) {
+    init(tabs: [KhalaSubTab], selection: Binding<Int>, category: KhalaAccent) {
         self.init(tabs: tabs, selection: selection, accent: KhalaTheme.accent(category))
     }
 

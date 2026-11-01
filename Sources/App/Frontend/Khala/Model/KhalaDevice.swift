@@ -24,9 +24,6 @@ struct KhalaDevice: Equatable, Identifiable {
     /// without a face entity (previews).
     let glyph: KhalaGlyph
 
-    /// The colour family under its pre-descriptor name; screens and routing still switch on it in slice 1.
-    var category: KhalaCategory { accent }
-
     init(
         id: String,
         name: String,
@@ -49,29 +46,5 @@ struct KhalaDevice: Equatable, Identifiable {
         self.isPinned = isPinned
         self.areaId = areaId
         self.glyph = glyph ?? .sf(kind.descriptor.fallbackSymbol)
-    }
-
-    /// A device from a legacy category (previews, older call sites): the kind is the one that role stands for on
-    /// the primary entity's domain, and the accent is the category itself.
-    init(
-        id: String,
-        name: String,
-        category: KhalaCategory,
-        primaryEntityId: String,
-        stateText: String,
-        memberEntityIds: [String],
-        isPinned: Bool
-    ) {
-        let domain = primaryEntityId.split(separator: ".", maxSplits: 1).first.map(String.init) ?? primaryEntityId
-        self.init(
-            id: id,
-            name: name,
-            kind: category.kind(forDomain: domain),
-            accent: category,
-            primaryEntityId: primaryEntityId,
-            stateText: stateText,
-            memberEntityIds: memberEntityIds,
-            isPinned: isPinned
-        )
     }
 }

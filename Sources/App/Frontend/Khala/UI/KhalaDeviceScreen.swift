@@ -10,7 +10,7 @@ struct KhalaDeviceScreen<Title: View, Trailing: View, Content: View>: View {
     let subtitle: String?
     let tabs: [KhalaSubTab]
     @Binding var selection: Int
-    let category: KhalaCategory
+    let category: KhalaAccent
     @ViewBuilder let title: () -> Title
     @ViewBuilder let trailing: () -> Trailing
     @ViewBuilder let content: () -> Content

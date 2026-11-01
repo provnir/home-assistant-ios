@@ -29,6 +29,21 @@ enum KhalaIconChain {
         return haGlyph(entity) ?? .sf(control.glyph.symbolName)
     }
 
+    /// A control tile's own Khala glyph (`KhalaControl.make`): a lock's state, else its hint's glyph
+    /// (`KhalaHints`, keyed on platform and translation key), else its device class and domain.
+    static func tileGlyph(for entity: KhalaEntity, hints: KhalaHints = .builtIn) -> KhalaControl.Glyph {
+        if entity.domain == "lock" { return entity.state == "locked" ? .lock : .unlock }
+        if let glyph = hints.hint(for: entity)?.glyph { return glyph }
+        if entity.deviceClass == "window" { return .window }
+        switch entity.domain {
+        case "light": return .lights
+        case "fan", "climate": return .fan
+        case "button": return .button
+        case "switch": return .power
+        default: return .generic
+        }
+    }
+
     /// A cover's glyph: an SF Symbol for the device classes that have one, open or closed; else HA's icon; else a
     /// gate's MDI glyph (SF has no gate) or blinds.
     static func cover(_ entity: KhalaEntity) -> KhalaGlyph {

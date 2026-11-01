@@ -45,6 +45,6 @@ print("Now card: \(timeline.headline)")
 print("  chips: " + timeline.chips.map { "\($0.name) \($0.stateText)" }.joined(separator: " | "))
 print("Devices (no registry, so each entity alone):")
 for device in devices {
-    print("  [\(device.category.rawValue)] \(device.name): \(device.stateText)")
+    print("  [\(device.accent.rawValue)] \(device.name): \(device.stateText)")
 }
 print("Cameras: \(KhalaDeviceCatalog.cameras(in: entities).count)")

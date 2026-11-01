@@ -4,7 +4,7 @@ import SwiftUI
 /// open the member's own screen; the switch turns just that member on or off.
 struct KhalaMemberRow: View {
     let control: KhalaControlModel
-    let category: KhalaCategory
+    let category: KhalaAccent
     let onIntent: (KhalaIntent) -> Void
     let onOpen: (() -> Void)?
 

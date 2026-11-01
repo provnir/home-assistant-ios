@@ -7,7 +7,7 @@ import SwiftUI
 struct KhalaEventCard: View {
     let title: String
     let subtitle: String?
-    let category: KhalaCategory
+    let category: KhalaAccent
     /// The detection whose capture is the thumbnail.
     var capture: KhalaCaptureRef?
     let action: () -> Void

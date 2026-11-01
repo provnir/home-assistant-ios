@@ -10,7 +10,7 @@ import SwiftUI
 /// `KhalaControlGrid` and `KhalaPendingStore`.
 struct KhalaTemplateScreen: View {
     let title: String
-    let category: KhalaCategory
+    let category: KhalaAccent
     let primaryEntityId: String
     let memberEntityIds: [String]
     @ObservedObject var live: KhalaLiveStates

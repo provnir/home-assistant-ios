@@ -8,7 +8,7 @@ import SwiftUI
 /// asks on its own trigger (`KhalaConfirmationModifier`); anything else falls back to its tile.
 struct KhalaPanelRow: View {
     let control: KhalaControlModel
-    let category: KhalaCategory
+    let category: KhalaAccent
     let onIntent: (KhalaIntent) -> Void
 
     /// A slider value waiting for its confirmation (a garage door's position above where it is).
