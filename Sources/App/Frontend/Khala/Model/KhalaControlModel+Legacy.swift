@@ -3,8 +3,9 @@ import Shared
 
 extension KhalaControlModel {
     /// The grid's model of a 41.1 tile (`KhalaControl`, still built by `KhalaCarLayout` and the generic screen until
-    /// slice 5 moves detection onto descriptors): same glyph, title, state, active look, enabled state and confirm
-    /// step, now driven by intents instead of a ready-made call.
+    /// slice 5 moves detection onto descriptors): same title, state, active look, enabled state and confirm
+    /// step, now driven by intents instead of a ready-made call. The glyph is the tile's own Khala glyph; a tile that
+    /// only has the generic one goes down `KhalaIconChain.tile` (cover device class, then HA's icon).
     init(_ control: KhalaControl, entity: KhalaEntity, attributes: [String: Any]) {
         let kind: Kind
         var directions = Directions.both
@@ -32,7 +33,7 @@ extension KhalaControlModel {
         default:
             kind = .toggle(isOn: control.isActive)
         }
-        self.init(entityId: control.entityId, title: control.title, symbol: .sf(control.glyph.symbolName), kind: kind,
+        self.init(entityId: control.entityId, title: control.title, symbol: KhalaIconChain.tile(control, entity: entity), kind: kind,
                   confirm: confirm)
         stateText = control.stateText
         self.isAvailable = isAvailable

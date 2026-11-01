@@ -30,6 +30,12 @@ struct KhalaEntity: Equatable {
     let areaId: String?
     /// The registry's label ids (`khala_hide`, `khala_kind_light`… see `KhalaLabelOverride`).
     let labels: [String]
+    /// The `icon` attribute: the icon the user (or the integration) set in Home Assistant's registry, e.g.
+    /// `mdi:garage-variant`.
+    let icon: String?
+    /// HA's own state-aware icon for the entity (`EntityIconResolver` over `Current.entityComponentIcons()`),
+    /// worked out by the UI layer, which can reach it; nil in tests and before the icon map has loaded.
+    let resolvedIcon: String?
     /// A group entity's members (`entity_id` in its attributes: a light group, a switch group); empty otherwise.
     let groupMembers: [String]
 
@@ -57,7 +63,8 @@ struct KhalaEntity: Equatable {
         platform: String? = nil,
         translationKey: String? = nil,
         areaId: String? = nil,
-        labels: [String] = []
+        labels: [String] = [],
+        resolvedIcon: String? = nil
     ) {
         self.entityId = entityId
         let domain = entityId.split(separator: ".", maxSplits: 1).first.map(String.init) ?? entityId
@@ -75,6 +82,8 @@ struct KhalaEntity: Equatable {
         self.translationKey = translationKey
         self.areaId = areaId
         self.labels = labels
+        self.icon = KhalaValue.string(attributes["icon"])
+        self.resolvedIcon = resolvedIcon
         self.groupMembers = KhalaValue.list(attributes["entity_id"]).compactMap { $0 as? String }
 
         self.stateDate = Self.stateDate(domain: domain, state: state, attributes: attributes)
@@ -103,6 +112,12 @@ struct KhalaEntity: Equatable {
         guard let deviceName, name.count > deviceName.count, name.hasPrefix(deviceName) else { return name }
         let rest = name.dropFirst(deviceName.count).trimmingCharacters(in: .whitespaces)
         return rest.isEmpty ? name : rest
+    }
+
+    /// Home Assistant's icon for the entity: the registry icon first, then HA's own resolution (the second step of
+    /// `KhalaIconChain`).
+    var haIcon: String? {
+        icon ?? resolvedIcon
     }
 
     /// Whether Home Assistant reports no usable state.

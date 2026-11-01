@@ -13,6 +13,8 @@ struct KhalaMenuRow: View {
     /// Drawn instead of `symbol` when set (a dashboard's Material Design icon from Home Assistant), as a template
     /// in `symbolColor`.
     var image: UIImage?
+    /// Drawn in the device chip instead of `symbol` when set (`KhalaDevice.glyph`: an SF Symbol or HA's MDI icon).
+    var glyph: KhalaGlyph?
     var trailing: String?
     var isSelected = false
     let action: () -> Void
@@ -25,8 +27,7 @@ struct KhalaMenuRow: View {
                         .fill(chipTint)
                         .frame(width: 28, height: 28)
                         .overlay(
-                            Image(systemSymbol: symbol)
-                                .font(.system(size: 13, weight: .semibold))
+                            KhalaGlyphImage(glyph: glyph ?? .sf(symbol.rawValue), pointSize: 13, weight: .semibold)
                                 .foregroundStyle(symbolColor)
                         )
                 } else if let image {

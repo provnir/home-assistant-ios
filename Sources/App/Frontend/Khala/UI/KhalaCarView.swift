@@ -61,11 +61,9 @@ struct KhalaCarView: View {
         .task(id: device.id) { await refresh(explicit: false) }
         .task(id: car.tracker?.entityId) {
             guard let tracker = car.tracker?.entityId else { return }
-            let history = await actions.history(
-                entityIds: [tracker],
-                since: Current.date().addingTimeInterval(-3 * 86400)
-            )
-            presence = Array(KhalaHistory.presenceChanges(history[tracker] ?? []).prefix(4))
+            let request = KhalaHistoryRequest.presence(of: tracker)
+            let states = await actions.history(request)
+            presence = request.presenceChanges(from: states)
         }
     }
 

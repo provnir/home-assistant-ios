@@ -88,7 +88,7 @@ struct KhalaCameraView: View {
             history = nil
             guard let camera else { return }
             let events = KhalaCameraCatalog.eventEntities(for: camera, in: live.entities).map(\.entityId)
-            history = await actions.history(entityIds: events, since: Current.date().addingTimeInterval(-7 * 86400))
+            history = await actions.history(.cameraEvents(events))
         }
         .khalaStillCover(item: $snapshot) { snapshot in
             KhalaSnapshotViewer(snapshot: snapshot, onClose: { self.snapshot = nil })
@@ -308,7 +308,7 @@ struct KhalaCameraView: View {
         if let history {
             let week = KhalaCameraCatalog.detections(
                 for: camera, in: live.entities, history: history,
-                since: Current.date().addingTimeInterval(-7 * 86400), now: now
+                since: Current.date().addingTimeInterval(-KhalaHistoryRequest.cameraEventsWindow), now: now
             )
             if week.isEmpty {
                 Text(KhalaScreenText.noDetectionsYet)

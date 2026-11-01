@@ -50,7 +50,8 @@ enum KhalaDeviceCatalog {
                 stateText: KhalaText.stateText(for: entity),
                 memberEntityIds: group.members.map(\.entityId),
                 isPinned: true,
-                areaId: entity.areaId
+                areaId: entity.areaId,
+                glyph: KhalaIconChain.device(kind: assignment.kind, face: entity)
             ))
         }
 
@@ -218,7 +219,8 @@ enum KhalaDeviceCatalog {
             stateText: KhalaText.stateText(for: face),
             memberEntityIds: group.members.map(\.entityId),
             isPinned: false,
-            areaId: face.areaId
+            areaId: face.areaId,
+            glyph: KhalaIconChain.device(kind: kind, face: face)
         )
     }
 }

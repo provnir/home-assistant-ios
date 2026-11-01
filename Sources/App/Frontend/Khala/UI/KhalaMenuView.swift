@@ -156,9 +156,10 @@ struct KhalaMenuView: View {
                             ForEach(section.devices) { device in
                                 KhalaMenuRow(
                                     title: device.name,
-                                    symbol: KhalaTheme.symbol(device),
+                                    symbol: KhalaTheme.symbol(device.category),
                                     symbolColor: KhalaTheme.accent(device.category),
                                     chipTint: KhalaTheme.tint(device.category),
+                                    glyph: device.glyph,
                                     trailing: device.stateText
                                 ) {
                                     onDevice(device)

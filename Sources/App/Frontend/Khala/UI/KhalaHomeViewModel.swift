@@ -43,6 +43,8 @@ final class KhalaHomeViewModel: ObservableObject {
     private var registry: [String: RegistryFacts] = [:]
     private var automationConfigs: [String: [String: Any]] = [:]
     private var requestedAutomationConfigs = Set<String>()
+    /// The icon map (`frontend/get_icons`) was asked for once this session, for HA's own icons (`KhalaIconChain`).
+    private var requestedIconMap = false
     private var tokens: [HACancellable] = []
     private var clock: AnyCancellable?
     private let assignmentStore: KhalaRoleAssignmentStore
@@ -123,9 +125,18 @@ final class KhalaHomeViewModel: ObservableObject {
     private func apply(_ states: HACachedStates) {
         latestStates = states
         var attributes: [String: [String: Any]] = [:]
+        let iconMap = componentIcons()
         entities = states.all.map { entity -> KhalaEntity in
             let facts = registry[entity.entityId]
             attributes[entity.entityId] = entity.attributes.dictionary
+            // HA's own icon, as the frontend resolves it: step 2 of `KhalaIconChain`, after Khala's SF Symbols.
+            let resolvedIcon = EntityIconResolver.icon(
+                domain: entity.domain,
+                deviceClass: entity.attributes.dictionary["device_class"] as? String,
+                state: entity.state,
+                attributes: entity.attributes.dictionary,
+                map: iconMap
+            )
             return KhalaEntity(
                 entityId: entity.entityId,
                 state: entity.state,
@@ -138,7 +149,8 @@ final class KhalaHomeViewModel: ObservableObject {
                 platform: facts?.platform,
                 translationKey: facts?.translationKey,
                 areaId: facts?.areaId,
-                labels: facts?.labels ?? []
+                labels: facts?.labels ?? [],
+                resolvedIcon: resolvedIcon
             )
         }
         .sorted { $0.entityId < $1.entityId }
@@ -168,6 +180,21 @@ final class KhalaHomeViewModel: ObservableObject {
     }
 
     // MARK: - Data sources
+
+    /// The server's entity-component icon map, when loaded. The database updater normally fetches it; when it
+    /// hasn't yet, it is asked for once and the states are applied again when it lands.
+    private func componentIcons() -> EntityComponentIconsMap? {
+        let serverId = server.identifier.rawValue
+        if let map = Current.entityComponentIcons().iconsMap(for: serverId) { return map }
+        guard !requestedIconMap else { return nil }
+        requestedIconMap = true
+        Task { @MainActor [weak self, server] in
+            guard await Current.entityComponentIcons().fetch(for: server) != nil,
+                  let self, let states = self.latestStates else { return }
+            self.apply(states)
+        }
+        return nil
+    }
 
     /// Mirrors `MainWindowGroupCommands`' read of the persisted entity and device registries.
     private func loadRegistry() {

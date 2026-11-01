@@ -50,11 +50,9 @@ struct KhalaWaterView: View {
         )
         .task(id: tab == 2) {
             guard tab == 2 else { return }
-            let history = await actions.history(
-                entityIds: [device.primaryEntityId],
-                since: Current.date().addingTimeInterval(-7 * 86400)
-            )
-            runs = KhalaHistory.runs(history[device.primaryEntityId] ?? [], now: Current.date())
+            let request = KhalaHistoryRequest.runs(of: device.primaryEntityId)
+            let states = await actions.history(request)
+            runs = request.runs(from: states, now: Current.date())
         }
     }
 

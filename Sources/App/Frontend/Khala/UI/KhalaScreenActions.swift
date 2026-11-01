@@ -64,23 +64,15 @@ struct KhalaScreenActions {
         }
     }
 
-    /// Recorded states of `entityIds` since `start`, with attributes (event types), every change included.
-    /// `history/history_during_period`: HA core `components/history/websocket_api.py`.
+    /// Reads the recorder for a device screen (`KhalaHistoryRequest`: camera events, car presence, boiler runs):
+    /// the recorded states by entity id, empty on failure (logged).
     @MainActor
-    func history(entityIds: [String], since start: Date) async -> [String: [KhalaHistoryState]] {
-        guard !entityIds.isEmpty, let api = Current.api(for: server) else { return [:] }
-        let formatter = ISO8601DateFormatter()
+    func history(_ request: KhalaHistoryRequest) async -> [String: [KhalaHistoryState]] {
+        guard !request.entityIds.isEmpty, let api = Current.api(for: server) else { return [:] }
         return await withCheckedContinuation { continuation in
             api.connection.send(.init(
                 type: .webSocket("history/history_during_period"),
-                data: [
-                    "start_time": formatter.string(from: start),
-                    "entity_ids": entityIds,
-                    "include_start_time_state": true,
-                    "significant_changes_only": false,
-                    "minimal_response": false,
-                    "no_attributes": false,
-                ]
+                data: request.message(now: Current.date())
             )) { result in
                 switch result {
                 case let .success(data):
@@ -88,9 +80,9 @@ struct KhalaScreenActions {
                         continuation.resume(returning: [:])
                         return
                     }
-                    continuation.resume(returning: KhalaHistory.parse(response))
+                    continuation.resume(returning: request.states(from: response))
                 case let .failure(error):
-                    Current.Log.info("Khala: no history for \(entityIds): \(error.localizedDescription)")
+                    Current.Log.info("Khala: no history for \(request.entityIds): \(error.localizedDescription)")
                     continuation.resume(returning: [:])
                 }
             }

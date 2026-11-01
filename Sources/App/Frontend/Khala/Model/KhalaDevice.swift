@@ -20,6 +20,9 @@ struct KhalaDevice: Equatable, Identifiable {
     let isPinned: Bool
     /// The Home Assistant area of its face entity (for grouping the menu by area, decision 1), when known.
     let areaId: String?
+    /// Its glyph in the menu and on the Now card (`KhalaIconChain.device`); the kind's fallback symbol when built
+    /// without a face entity (previews).
+    let glyph: KhalaGlyph
 
     /// The colour family under its pre-descriptor name; screens and routing still switch on it in slice 1.
     var category: KhalaCategory { accent }
@@ -33,7 +36,8 @@ struct KhalaDevice: Equatable, Identifiable {
         stateText: String,
         memberEntityIds: [String],
         isPinned: Bool,
-        areaId: String? = nil
+        areaId: String? = nil,
+        glyph: KhalaGlyph? = nil
     ) {
         self.id = id
         self.name = name
@@ -44,6 +48,7 @@ struct KhalaDevice: Equatable, Identifiable {
         self.memberEntityIds = memberEntityIds
         self.isPinned = isPinned
         self.areaId = areaId
+        self.glyph = glyph ?? .sf(kind.descriptor.fallbackSymbol)
     }
 
     /// A device from a legacy category (previews, older call sites): the kind is the one that role stands for on

@@ -12,7 +12,8 @@ struct KhalaDescriptor: Equatable {
     let primary: KhalaPrimaryAction
     /// Device precedence and Now-chip order, highest first.
     let priority: Int
-    /// SF Symbol name, used only after the icon chain (registry icon, hint, HA's own icon resolution).
+    /// SF Symbol name: the designed glyph of the kinds Khala draws its own way, else the last step of
+    /// `KhalaIconChain`, after HA's own icon.
     let fallbackSymbol: String
     /// The screen `KhalaTemplateScreen` draws for this kind (slice 3: lights and fans; the rest generic).
     var template: KhalaTemplateSpec = .generic

@@ -1,7 +1,6 @@
-import SFSafeSymbols
 import SwiftUI
 
-/// A tinted chip of the Now card: category glyph, the device's state in large type, its name below.
+/// A tinted chip of the Now card: the device's glyph (`KhalaIconChain`), its state in large type, its name below.
 struct KhalaDeviceChip: View {
     let device: KhalaDevice
     let action: () -> Void
@@ -9,8 +8,7 @@ struct KhalaDeviceChip: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 3) {
-                Image(systemSymbol: KhalaTheme.symbol(device))
-                    .font(.system(size: 17, weight: .medium))
+                KhalaGlyphImage(glyph: device.glyph, pointSize: 17)
                     .foregroundStyle(KhalaTheme.accent(device.category))
                 Text(device.stateText)
                     .font(KhalaTheme.chipValue)

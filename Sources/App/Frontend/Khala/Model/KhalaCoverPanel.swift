@@ -28,7 +28,11 @@ struct KhalaCoverPanel: Equatable {
         entityId = entity.entityId
 
         func make(_ title: String, symbol: String, kind: KhalaControlModel.Kind) -> KhalaControlModel {
-            var control = KhalaControlModel(entityId: entity.entityId, title: title, symbol: .sf(symbol), kind: kind,
+            make(title, glyph: .sf(symbol), kind: kind)
+        }
+
+        func make(_ title: String, glyph: KhalaGlyph, kind: KhalaControlModel.Kind) -> KhalaControlModel {
+            var control = KhalaControlModel(entityId: entity.entityId, title: title, symbol: glyph, kind: kind,
                                             confirm: nil)
             control.deviceClass = entity.deviceClass
             control.isAvailable = available
@@ -43,9 +47,8 @@ struct KhalaCoverPanel: Equatable {
         ].compactMap { $0 }
         if !commands.isEmpty {
             // Titled with the cover's own name, so the question reads "Open garage door?".
-            var control = make(entity.name, symbol: Self.symbol(deviceClass: entity.deviceClass,
-                                                                isOpen: entity.state != "closed"),
-                               kind: .commands(commands))
+            // The menu's glyph for this cover (`KhalaIconChain`): garage, door, window… by device class.
+            var control = make(entity.name, glyph: KhalaIconChain.cover(entity), kind: .commands(commands))
             control.stateText = KhalaText.humanized(state: entity.state)
             // As Home Assistant's own card: no Open once fully open (or opening), no Close once closed (or closing).
             let fullyOpen = position.map { $0 >= 100 } ?? (entity.state == "open")
@@ -81,16 +84,5 @@ struct KhalaCoverPanel: Equatable {
             parts.append(KhalaSlider.position.text(position))
         }
         subtitle = parts.joined(separator: " · ")
-    }
-
-    /// The cover's glyph from its device class (language-free): a garage door, a gate, a door, a window, else blinds.
-    static func symbol(deviceClass: String?, isOpen: Bool) -> String {
-        switch deviceClass {
-        case "garage": return isOpen ? "door.garage.open" : "door.garage.closed"
-        case "gate": return "door.sliding.right.hand.closed"
-        case "door": return isOpen ? "door.left.hand.open" : "door.left.hand.closed"
-        case "window": return isOpen ? "window.vertical.open" : "window.vertical.closed"
-        default: return isOpen ? "blinds.horizontal.open" : "blinds.horizontal.closed"
-        }
     }
 }
