@@ -14,6 +14,7 @@ import UIKit
 struct KhalaShellView: View {
     private let server: Server
     private let initialPath: String?
+    private let appCoordinator: AppCoordinator?
     private let onWebViewController: (WebViewController) -> Void
     /// Decided once: flipping it would rebuild the web view.
     private let isEnabled: Bool
@@ -28,12 +29,18 @@ struct KhalaShellView: View {
     @State private var searchFocusRequest = 0
     @State private var showsDeviceSettings = false
     @State private var showsAbout = false
-    /// An app settings screen shown in a sheet, where the container has no navigation stack to push it on.
+    /// An app settings screen shown in a sheet over the shell (the container has no navigation stack).
     @State private var appSettingsSheetItem: SettingsItem?
 
-    init(server: Server, initialPath: String?, onWebViewController: @escaping (WebViewController) -> Void) {
+    init(
+        server: Server,
+        initialPath: String?,
+        appCoordinator: AppCoordinator? = nil,
+        onWebViewController: @escaping (WebViewController) -> Void
+    ) {
         self.server = server
         self.initialPath = initialPath
+        self.appCoordinator = appCoordinator
         self.onWebViewController = onWebViewController
         self.isEnabled = KhalaShell.isEnabled
         // A launch that already names a frontend page (deep link, restored path) lands on it, not on Today.
@@ -53,7 +60,7 @@ struct KhalaShellView: View {
 
     /// The stock web frontend, unchanged. Built in exactly one place per branch so its identity never changes.
     private var frontend: some View {
-        HomeAssistantView(server: server, initialPath: initialPath) { [shell] controller in
+        HomeAssistantView(server: server, initialPath: initialPath, appCoordinator: appCoordinator) { [shell] controller in
             onWebViewController(controller)
             shell.attach(controller)
         }
@@ -379,30 +386,17 @@ struct KhalaShellView: View {
 
     // MARK: - Actions
 
-    /// The container's navigation stack (`ContainerView.frontend`), which the app's settings screens push onto;
-    /// absent with the App Labs tab bar on iOS 26.
-    private var hasPushStack: Bool {
-        if #available(iOS 26, *), NativeTabBarState.shared.isEnabled { return false }
-        return appSettings != nil
-    }
-
-    /// One of the companion app's settings screens, pushed as it is over the shell (Back returns to Settings),
-    /// in Khala's appearance (`KhalaSettingsAppearance`, applied by the container's destination).
+    /// One of the companion app's settings screens, hosted as it is in a sheet over the shell, in Khala's
+    /// appearance (`KhalaSettingsAppearance`). The container has no navigation stack to push onto: upstream
+    /// presents Settings as a sheet only.
     private func openAppSettings(_ item: SettingsItem) {
-        if hasPushStack, let appSettings {
-            appSettings.pushPath.append(AppSettingsPushRoute.item(item))
-        } else {
-            appSettingsSheetItem = item
-        }
+        appSettingsSheetItem = item
     }
 
-    /// The app's complete settings list (Location, Sensors, Widgets, Siri, Watch, ...), pushed the same way.
+    /// The app's complete settings list (Location, Sensors, Widgets, Siri, Watch, ...): upstream's own Settings
+    /// sheet.
     private func openAllAppSettings() {
-        if hasPushStack, let appSettings {
-            appSettings.pushPath.append(AppSettingsPushRoute.settings)
-        } else {
-            appSettings?.presentSettings()
-        }
+        appSettings?.presentSettings()
     }
 
     private func handle(_ item: KhalaTimelineItem) {

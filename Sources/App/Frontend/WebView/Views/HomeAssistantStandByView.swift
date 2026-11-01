@@ -18,6 +18,7 @@ struct HomeAssistantStandByView: View {
     let isLoading: Bool
     let serverSelectionNamespace: Namespace.ID?
     let onSelectServerTapped: (() -> Void)?
+    let onSelectServer: ((Server) -> Void)?
     let onGestureAction: ((HAGestureAction) -> Void)?
     let onLogoDismiss: (() -> Void)?
     let onCleanCacheAndReload: (() -> Void)?
@@ -105,6 +106,7 @@ struct HomeAssistantStandByView: View {
         isLoading: Bool = false,
         serverSelectionNamespace: Namespace.ID? = nil,
         onSelectServerTapped: (() -> Void)? = nil,
+        onSelectServer: ((Server) -> Void)? = nil,
         onGestureAction: ((HAGestureAction) -> Void)? = nil,
         onLogoDismiss: (() -> Void)? = nil,
         onCleanCacheAndReload: (() -> Void)? = nil,
@@ -117,6 +119,7 @@ struct HomeAssistantStandByView: View {
         self.isLoading = isLoading
         self.serverSelectionNamespace = serverSelectionNamespace
         self.onSelectServerTapped = onSelectServerTapped
+        self.onSelectServer = onSelectServer
         self.onGestureAction = onGestureAction
         self.onLogoDismiss = onLogoDismiss
         self.onCleanCacheAndReload = onCleanCacheAndReload
@@ -241,7 +244,9 @@ struct HomeAssistantStandByView: View {
                     dismissAction: emptyState.dismissAction,
                     // The accessories stay at the safe-area edges (shifting them would push one under
                     // the vertical bar); only the picker follows the display-centered logo below it.
-                    serverSelectionHorizontalOffset: contentOffset.width
+                    serverSelectionHorizontalOffset: contentOffset.width,
+                    serverSwitcherAction: onSelectServerTapped,
+                    serverSelectionNamespace: serverSelectionNamespace
                 )
                 .opacity(contentOpacity)
             }
@@ -571,10 +576,8 @@ struct HomeAssistantStandByView: View {
         onLogoDismiss()
     }
 
-    private func selectServer(_ server: Server) {
-        Current.sceneManager.appCoordinator.done { coordinator in
-            coordinator.activate(server: server)
-        }
+    func selectServer(_ server: Server) {
+        onSelectServer?(server)
     }
 
     private func openSettings() {

@@ -8,7 +8,6 @@ struct ContainerView: View {
     @StateObject private var viewModel = ContainerViewModel()
     /// This scene's Settings presenter, owned by `ConditionalContainerView`.
     @ObservedObject var appSettings: AppSettingsPresenter
-    @ObservedObject private var nativeTabBar = NativeTabBarState.shared
     @State private var coordinator = AppContainerCoordinator()
 
     var body: some View {
@@ -31,16 +30,10 @@ struct ContainerView: View {
             coordinator.onSetup = { state.reevaluate() }
             coordinator.settingsPresenter = appSettings
             appSettings.appCoordinator = coordinator
-            coordinator.onShowSettings = { [weak coordinator] pushOntoNavigationStack in
+            coordinator.onShowSettings = {
                 // Khala: the frontend's "Companion app" settings open Khala's own Settings screen.
                 if KhalaShell.isEnabled, KhalaShell.requestSettings() { return }
-                // Push only in compact width, read from the window at presentation time.
-                let sizeClass = coordinator?.window?.traitCollection.horizontalSizeClass
-                if pushOntoNavigationStack, sizeClass == .compact, !NativeTabBarState.shared.isEnabled {
-                    appSettings.isPushPresented = true
-                } else {
-                    appSettings.presentSettings()
-                }
+                appSettings.presentSettings()
             }
             coordinator.onShowAssistSettings = { viewModel.presentAssistSettings() }
             coordinator.onShowDownloadManager = { viewModel.presentDownloadManager($0) }
@@ -78,7 +71,8 @@ struct ContainerView: View {
                         onDismiss: { viewModel.fullScreenCover = nil }
                     )
                     .toolbar {
-                        ToolbarItem(placement: .topBarLeading) {
+                        // Trailing, so it stays clear of the back button on the home network step
+                        ToolbarItem(placement: .topBarTrailing) {
                             CloseButton { viewModel.fullScreenCover = nil }
                         }
                     }
@@ -89,36 +83,16 @@ struct ContainerView: View {
         }
     }
 
-    /// The frontend, in the stack Settings is pushed onto; with the App Labs tab bar on it stands alone.
-    @ViewBuilder
+    /// The frontend stands alone, with Settings presented over it as a sheet. A navigation container around
+    /// it would make iOS 27.1 reserve iPhone Duo's vertical bar: an 84 pt safe-area strip the frontend never
+    /// fills, on the outer edge of its Split View pane.
     private func frontend(server: Server, initialPath: String?) -> some View {
         // Khala: the native shell (Today + menu) around the unchanged web frontend; see Frontend/Khala.
-        let homeAssistant = KhalaShellView(server: server, initialPath: initialPath) { webViewController in
+        KhalaShellView(server: server, initialPath: initialPath, appCoordinator: coordinator) { webViewController in
             coordinator.setFrontend(webViewController)
             Current.sceneManager.setWebViewController(webViewController)
         }
         .id(server.identifier.rawValue)
-
-        if #available(iOS 26, *), nativeTabBar.isEnabled {
-            homeAssistant
-        } else {
-            NavigationStack(path: $appSettings.pushPath) {
-                homeAssistant
-                    .toolbar(.hidden, for: .navigationBar)
-                    .navigationDestination(for: AppSettingsPushRoute.self) { route in
-                        switch route {
-                        case .settings:
-                            SettingsView(embedInOwnNavigation: false)
-                                .injectingViewControllerProvider()
-                                .khalaSettingsAppearance()
-                        case let .item(item):
-                            item.destinationView
-                                .injectingViewControllerProvider()
-                                .khalaSettingsAppearance()
-                        }
-                    }
-            }
-        }
     }
 
     /// The recovered-server screens have no Home Assistant logo for the launch splash to morph into, so

@@ -1,3 +1,4 @@
+import CoreLocation
 import PromiseKit
 import SFSafeSymbols
 import Shared
@@ -33,6 +34,7 @@ struct DebugView: View {
     @State private var showClearWebCacheAlert = false
     @State private var showResetAppAlert = false
     @State private var showClearAllowedTagsAlert = false
+    @State private var showSimulateRestoredDeviceDialog = false
     @State private var watchSyncErrorMessage: String?
     @State private var showWatchSyncError = false
 
@@ -348,6 +350,23 @@ struct DebugView: View {
         )
     }
 
+    static let regionEnterMaximumFuzzDistanceOptions: [CLLocationDistance] = [50, 100, 250, 500, 1000, 2000]
+
+    static var regionEnterMaximumFuzzDistanceBinding: Binding<CLLocationDistance> {
+        .init(
+            get: { Current.settingsStore.regionEnterMaximumFuzzDistance },
+            set: { Current.settingsStore.regionEnterMaximumFuzzDistance = $0 }
+        )
+    }
+
+    static func regionEnterMaximumFuzzDistanceRow(_ metres: CLLocationDistance) -> some View {
+        Text(verbatim: "\(Int(metres))m").tag(metres)
+    }
+
+    static func regionEnterMaximumFuzzDistanceRows() -> some View {
+        ForEach(regionEnterMaximumFuzzDistanceOptions, id: \.self, content: regionEnterMaximumFuzzDistanceRow)
+    }
+
     var developerSection: some View {
         Section {
             NavigationLink {
@@ -480,6 +499,29 @@ struct DebugView: View {
                 )
             }
 
+            if !Current.isCatalyst {
+                Button(action: { showSimulateRestoredDeviceDialog = true }) {
+                    linkContent(
+                        image: .init(systemSymbol: .iphoneAndArrowForward),
+                        title: L10n.Settings.Debugging.SimulateRestoredDevice.title
+                    )
+                }
+                .confirmationDialog(
+                    L10n.Settings.Debugging.SimulateRestoredDevice.alertTitle,
+                    isPresented: $showSimulateRestoredDeviceDialog,
+                    titleVisibility: .visible
+                ) {
+                    Button(
+                        L10n.Settings.Debugging.SimulateRestoredDevice.confirmButton,
+                        role: .destructive,
+                        action: simulateRestoredDevice
+                    )
+                    Button(L10n.cancelLabel, role: .cancel) {}
+                } message: {
+                    Text(L10n.Settings.Debugging.SimulateRestoredDevice.message)
+                }
+            }
+
             Toggle(isOn: .init(get: {
                 prefs.bool(forKey: XCGLogger.shouldNotifyUserDefaultsKey)
             }, set: { newValue in
@@ -503,6 +545,12 @@ struct DebugView: View {
             Toggle(isOn: Self.notifyOnLocalPushStateChangesBinding) {
                 Text(L10n.Settings.Debugging.NotifyLocalPushStateChanges.title)
             }
+
+            Picker(
+                L10n.Settings.Debugging.RegionEnterMaximumFuzzDistance.title,
+                selection: Self.regionEnterMaximumFuzzDistanceBinding,
+                content: Self.regionEnterMaximumFuzzDistanceRows
+            ).pickerStyle(.menu)
 
             if !Current.isCatalyst, horizontalSizeClass == .compact {
                 Toggle(isOn: .init(get: {
@@ -531,6 +579,12 @@ struct DebugView: View {
         } footer: {
             Text(verbatim: L10n.Settings.Developer.footer)
         }
+    }
+
+    func simulateRestoredDevice() {
+        RegistrationOwnership().simulateRestoreFromAnotherDevice()
+        feedbackGenerator.notificationOccurred(.success)
+        dismissSettings()
     }
 
     private func sendMapNotification() {
@@ -645,7 +699,7 @@ struct DebugView: View {
         await toastProgressTask.value
         hideResetAppToast()
         loadingResetApp = false
-        dismissSettingsAfterReset()
+        dismissSettings()
         Current.onboardingObservation.needed(.logout)
     }
 
@@ -678,9 +732,8 @@ struct DebugView: View {
         }
     }
 
-    private func dismissSettingsAfterReset() {
+    private func dismissSettings() {
         appSettingsPresenter?.isSheetPresented = false
-        appSettingsPresenter?.isPushPresented = false
         dismiss()
     }
 
