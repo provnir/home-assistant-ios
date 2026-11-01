@@ -4,6 +4,11 @@
 # SwiftPM package (`@testable import HomeAssistant` becomes `@testable import KhalaModel`) and run with
 # swift-testing. The SwiftUI half (Khala/UI) needs Xcode and is not covered.
 #
+# Model may `import Shared` for Home Assistant's own Foundation-only parsers (`*Capabilities`, `Service`,
+# `ClimateEntityFeature`). Those upstream files are staged READ-ONLY, unchanged, into a `Shared` module here,
+# with `HAKitShim.swift` standing in for the bit of HAKit they import. If an upstream merge gives one of them a
+# new dependency, this build fails loudly; nothing is ever copied back.
+#
 #   Tools/Khala/linux-check.sh                 # swift test
 #   Tools/Khala/linux-check.sh states.json     # also print Today + devices for a saved GET /api/states answer
 #
@@ -17,8 +22,15 @@ if [[ -n "${SWIFT_BIN:-}" ]]; then export PATH="$SWIFT_BIN:$PATH"; fi
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-mkdir -p "$WORK/Sources/KhalaModel" "$WORK/Sources/KhalaDump" "$WORK/Tests/KhalaModelTests"
+mkdir -p "$WORK/Sources/KhalaModel" "$WORK/Sources/KhalaDump" "$WORK/Tests/KhalaModelTests" \
+  "$WORK/Sources/Shared" "$WORK/Sources/HAKit"
 cp "$MODEL"/*.swift "$WORK/Sources/KhalaModel/"
+DOMAIN="$ROOT/Sources/Shared/Domain"
+for file in LightCapabilities CoverCapabilities FanCapabilities LockCapabilities VacuumCapabilities Service \
+  Climate/ClimateEntityFeature; do
+  cp "$DOMAIN/$file.swift" "$WORK/Sources/Shared/"
+done
+cp "$(dirname "$0")/HAKitShim.swift" "$WORK/Sources/HAKit/HAEntity.swift"
 for file in "$TESTS"/*.swift; do
   sed 's/^@testable import HomeAssistant$/@testable import KhalaModel/' "$file" > "$WORK/Tests/KhalaModelTests/$(basename "$file")"
 done
@@ -31,9 +43,11 @@ import PackageDescription
 let package = Package(
     name: "KhalaModel",
     targets: [
-        .target(name: "KhalaModel", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(name: "HAKit", swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(name: "Shared", dependencies: ["HAKit"], swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(name: "KhalaModel", dependencies: ["Shared"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .executableTarget(name: "KhalaDump", dependencies: ["KhalaModel"], swiftSettings: [.swiftLanguageMode(.v5)]),
-        .testTarget(name: "KhalaModelTests", dependencies: ["KhalaModel"], swiftSettings: [.swiftLanguageMode(.v5)]),
+        .testTarget(name: "KhalaModelTests", dependencies: ["KhalaModel", "Shared"], swiftSettings: [.swiftLanguageMode(.v5)]),
     ]
 )
 SWIFT

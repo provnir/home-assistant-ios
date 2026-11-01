@@ -30,6 +30,10 @@ final class KhalaHomeViewModel: ObservableObject {
         let deviceName: String?
         let isAuxiliary: Bool
         let platform: String?
+        let translationKey: String?
+        /// The entity's own area, else its device's.
+        let areaId: String?
+        let labels: [String]
     }
 
     private var entities: [KhalaEntity] = []
@@ -125,7 +129,10 @@ final class KhalaHomeViewModel: ObservableObject {
                 lastUpdated: entity.lastUpdated,
                 deviceId: facts?.deviceId,
                 deviceName: facts?.deviceName,
-                isAuxiliary: facts?.isAuxiliary ?? false
+                isAuxiliary: facts?.isAuxiliary ?? false,
+                translationKey: facts?.translationKey,
+                areaId: facts?.areaId,
+                labels: facts?.labels ?? []
             )
         }
         .sorted { $0.entityId < $1.entityId }
@@ -164,7 +171,11 @@ final class KhalaHomeViewModel: ObservableObject {
             let devices = try AppDeviceRegistry.config(serverId: serverId)
             var deviceNames: [String: String] = [:]
             var deviceModels: [String: String] = [:]
+            var deviceAreas: [String: String] = [:]
             for device in devices {
+                if let area = device.areaId, !area.isEmpty {
+                    deviceAreas[device.deviceId] = area
+                }
                 if let name = device.nameByUser ?? device.name {
                     deviceNames[device.deviceId] = name
                 }
@@ -179,7 +190,10 @@ final class KhalaHomeViewModel: ObservableObject {
                     deviceId: entry.deviceId,
                     deviceName: entry.deviceId.flatMap { deviceNames[$0] },
                     isAuxiliary: entry.entityCategory != nil || entry.isHidden,
-                    platform: entry.platform
+                    platform: entry.platform,
+                    translationKey: entry.translationKey,
+                    areaId: entry.areaId ?? entry.deviceId.flatMap { deviceAreas[$0] },
+                    labels: entry.labels ?? []
                 )
                 if let platform = entry.platform { platforms[entry.entityId] = platform }
             }

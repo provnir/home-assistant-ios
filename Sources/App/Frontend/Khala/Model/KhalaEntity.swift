@@ -21,6 +21,12 @@ struct KhalaEntity: Equatable {
     let deviceName: String?
     /// Config/diagnostic or hidden in the entity registry: never a device's face or a timeline item.
     let isAuxiliary: Bool
+    /// The registry's `translation_key`: which of its integration's entities this is, language-free.
+    let translationKey: String?
+    /// The entity's area: its own registry area, else its device's.
+    let areaId: String?
+    /// The registry's label ids (`khala_hide`, `khala_kind_light`… see `KhalaLabelOverride`).
+    let labels: [String]
 
     /// The state read as a timestamp (`event.*`, `sensor` with device class `timestamp`, `image.*`).
     let stateDate: Date?
@@ -42,7 +48,10 @@ struct KhalaEntity: Equatable {
         lastUpdated: Date? = nil,
         deviceId: String? = nil,
         deviceName: String? = nil,
-        isAuxiliary: Bool = false
+        isAuxiliary: Bool = false,
+        translationKey: String? = nil,
+        areaId: String? = nil,
+        labels: [String] = []
     ) {
         self.entityId = entityId
         let domain = entityId.split(separator: ".", maxSplits: 1).first.map(String.init) ?? entityId
@@ -56,6 +65,9 @@ struct KhalaEntity: Equatable {
         self.deviceId = deviceId
         self.deviceName = deviceName
         self.isAuxiliary = isAuxiliary
+        self.translationKey = translationKey
+        self.areaId = areaId
+        self.labels = labels
 
         self.stateDate = Self.stateDate(domain: domain, state: state, attributes: attributes)
         self.eventType = domain == "event" ? KhalaValue.string(attributes["event_type"]) : nil

@@ -1,23 +1,12 @@
 import Foundation
 
-/// The "tad of color" families of the Khala design (DESIGN.md, Tokens). One muted accent per family, used only on
-/// timeline dots, small glyph chips and active controls. Also the user-assignable *role* of a device: the role is
-/// what picks its glyph and accent, so a switch the user marks as `heat` reads as hot water everywhere.
-///
-/// Foundation-only on purpose (no SwiftUI): colours and glyphs live in `KhalaTheme`.
-enum KhalaCategory: String, Codable, CaseIterable, Equatable {
-    /// Cameras and security.
-    case security
-    case car
-    /// Water heaters, boilers and other heat sources.
-    case heat
-    /// Theater, speakers and other media players.
-    case media
-    /// Sunrise and sunset. Never a device role.
-    case sun
-    /// Anything else (plugs, relays, unclassified automations).
-    case neutral
+/// The pre-descriptor name of `KhalaAccent`, kept as a thin alias while the screens move to `KhalaKind` and
+/// descriptors (DESCRIPTORS-DESIGN.md §4): a category is a colour family, and the user-facing *role* picker in the
+/// device settings still offers these families. The role helpers below are that legacy layer; each role maps to
+/// one kind (`kind(forDomain:)`), and the kind's default accent is the role again, so pins round-trip.
+typealias KhalaCategory = KhalaAccent
 
+extension KhalaAccent {
     /// The roles a user can give a device in the device settings, in display order.
     static var assignableRoles: [KhalaCategory] {
         [.car, .heat, .media, .security, .neutral]
@@ -47,6 +36,20 @@ enum KhalaCategory: String, Codable, CaseIterable, Equatable {
         case .media: return "Media"
         case .sun: return "Sun"
         case .neutral: return "Other"
+        }
+    }
+
+    /// The kind a legacy role stands for on an entity of `domain` (the decode of pins stored before kinds existed):
+    /// heat → water heater, media → media, security → lock for a lock and camera otherwise, car → car,
+    /// neutral → switch. `sun` was never assignable; it reads as generic.
+    func kind(forDomain domain: String) -> KhalaKind {
+        switch self {
+        case .heat: return .waterHeater
+        case .media: return .media
+        case .security: return domain == "lock" ? .lock : .camera
+        case .car: return .car
+        case .neutral: return .switch
+        case .sun: return .generic
         }
     }
 }

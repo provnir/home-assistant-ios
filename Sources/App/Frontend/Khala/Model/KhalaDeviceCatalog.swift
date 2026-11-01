@@ -4,6 +4,8 @@ import Foundation
 /// Assistant data (domains present on a registry device, device classes) and from the user's role assignments.
 ///
 /// Detection, per registry device (an entity without a device stands alone):
+/// Each detected device gets the `KhalaKind` its rule stands for (car, water heater, media, switch) and that kind's
+/// accent; a pin gets the assignment's kind and role colour.
 /// - **car**: has a `device_tracker` and a `lock` or `climate` (phones have trackers but no locks); shows the
 ///   battery sensor when there is one, else where the tracker is.
 /// - **heat**: has a `water_heater`.
@@ -32,11 +34,13 @@ enum KhalaDeviceCatalog {
             pinned.append(KhalaDevice(
                 id: "pin:\(entity.entityId)",
                 name: assignment.displayLabel ?? entity.name,
-                category: assignment.role,
+                kind: assignment.kind,
+                accent: assignment.role,
                 primaryEntityId: entity.entityId,
                 stateText: KhalaText.stateText(for: entity),
                 memberEntityIds: group.members.map(\.entityId),
-                isPinned: true
+                isPinned: true,
+                areaId: entity.areaId
             ))
         }
 
@@ -127,20 +131,20 @@ enum KhalaDeviceCatalog {
            let face = group.first(domain: "sensor", where: { $0.deviceClass == "battery" && !$0.isAuxiliary })
            ?? group.first(domain: "device_tracker") {
             let tracker = group.first(domain: "device_tracker")
-            return device(group, face: face, category: .car, fallbackName: tracker?.name ?? face.name)
+            return device(group, face: face, kind: .car, fallbackName: tracker?.name ?? face.name)
         }
         if let heater = group.first(domain: "water_heater", where: { !$0.isAuxiliary }) {
-            return device(group, face: heater, category: .heat, fallbackName: heater.name)
+            return device(group, face: heater, kind: .waterHeater, fallbackName: heater.name)
         }
         if domains.contains("media_player") {
             let players = visible.filter { $0.domain == "media_player" }
             let preferred = players.first { ["receiver", "tv"].contains($0.deviceClass ?? "") }
             guard let face = preferred ?? players.sorted(by: { $0.entityId < $1.entityId }).first else { return nil }
-            return device(group, face: face, category: .media, fallbackName: face.name)
+            return device(group, face: face, kind: .media, fallbackName: face.name)
         }
         if domains.isDisjoint(with: primaryDomains),
            let plug = group.first(domain: "switch", where: { !$0.isAuxiliary }) {
-            return device(group, face: plug, category: .neutral, fallbackName: plug.name)
+            return device(group, face: plug, kind: .switch, fallbackName: plug.name)
         }
         return nil
     }
@@ -148,17 +152,18 @@ enum KhalaDeviceCatalog {
     private static func device(
         _ group: Group,
         face: KhalaEntity,
-        category: KhalaCategory,
+        kind: KhalaKind,
         fallbackName: String
     ) -> KhalaDevice {
         KhalaDevice(
             id: group.key,
             name: face.deviceName ?? fallbackName,
-            category: category,
+            kind: kind,
             primaryEntityId: face.entityId,
             stateText: KhalaText.stateText(for: face),
             memberEntityIds: group.members.map(\.entityId),
-            isPinned: false
+            isPinned: false,
+            areaId: face.areaId
         )
     }
 }
