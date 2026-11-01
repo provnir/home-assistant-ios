@@ -7,6 +7,27 @@ struct KhalaControl: Equatable, Identifiable {
     enum Glyph: String, Equatable {
         case lock, unlock, shield, chargePort, frunk, trunk, window, lights, horn, power, seat, wheel, defrost
         case fan, button, generic
+
+        /// The SF Symbol a tile draws for this glyph (moved here from `KhalaControlTile`, unchanged).
+        var symbolName: String {
+            switch self {
+            case .lock: return "lock.fill"
+            case .unlock: return "lock.open.fill"
+            case .shield: return "shield.fill"
+            case .chargePort: return "bolt.fill"
+            case .frunk, .trunk: return "car.rear"
+            case .window: return "arrow.up.doc"
+            case .lights: return "lightbulb.fill"
+            case .horn: return "speaker.wave.2.fill"
+            case .power: return "power"
+            case .seat: return "flame.fill"
+            case .wheel: return "dial"
+            case .defrost: return "sparkles"
+            case .fan: return "fanblades"
+            case .button: return "circle.circle"
+            case .generic: return "slider.horizontal.3"
+            }
+        }
     }
 
     let entityId: String

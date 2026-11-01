@@ -9,6 +9,8 @@ import UIKit
 struct KhalaCarView: View {
     let device: KhalaDevice
     @ObservedObject var live: KhalaLiveStates
+    /// The optimistic overlay of the car's controls (`live.pending`), observed for the steppers and Start/Stop.
+    @ObservedObject var pending: KhalaPendingStore
     let actions: KhalaScreenActions
     let calendar: Calendar
     /// Opens the media sheet for the car's own player.
@@ -139,15 +141,15 @@ struct KhalaCarView: View {
                         .controlSize(.small)
                 case .didntWake:
                     Image(systemSymbol: .exclamationmarkTriangleFill)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(KhalaTheme.smallGlyph)
                         .foregroundStyle(KhalaTheme.accent(.heat))
                 case .idle:
                     Image(systemSymbol: car.isAwake == false ? .moonFill : .arrowClockwise)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(KhalaTheme.smallGlyph)
                         .foregroundStyle(KhalaTheme.tertiary)
                 }
                 Text(syncTitle)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(KhalaTheme.rowValue)
                     .foregroundStyle(KhalaTheme.ink)
             }
             .padding(.horizontal, 16)
@@ -179,13 +181,13 @@ struct KhalaCarView: View {
                 .frame(maxWidth: .infinity)
             HStack(alignment: .lastTextBaseline) {
                 Text(car.battery.map { "\(Int($0.rounded()))%" } ?? device.stateText)
-                    .font(.system(size: 52, weight: .semibold))
+                    .font(KhalaTheme.heroFigure)
                     .kerning(-1.5)
                     .foregroundStyle(KhalaTheme.ink)
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
                     if let range = car.rangeText {
-                        Text(range).font(.system(size: 17, weight: .semibold)).foregroundStyle(KhalaTheme.ink)
+                        Text(range).font(KhalaTheme.figure).foregroundStyle(KhalaTheme.ink)
                     }
                     if let charging = car.chargingText {
                         Text(charging).font(KhalaTheme.secondaryText).foregroundStyle(KhalaTheme.tertiary)
@@ -236,33 +238,43 @@ struct KhalaCarView: View {
         return formatter.string(from: date)
     }
 
-    /// The controls in a wrapping three-column grid; on Overview also the car's media player and a "More" tile
-    /// for the buttons Khala has no glyph for.
+    /// The controls in the shared wrapping three-column grid; on Overview also the car's media player and a "More"
+    /// tile for the buttons Khala has no glyph for.
     @ViewBuilder
     private func controlsGrid(_ controls: [KhalaControl], car: KhalaCarLayout, extras: Bool = false) -> some View {
         let showsMedia = extras && car.mediaPlayerId != nil
         let showsMore = extras && !car.moreControls.isEmpty
-        if !controls.isEmpty || showsMedia || showsMore {
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-                ForEach(controls) { control in
-                    KhalaControlTile(control: control, category: .car) { call in send(call, car: car) }
-                }
-                if showsMedia, let player = car.mediaPlayerId {
-                    Button { onMedia(player) } label: { extraTile(KhalaScreenText.media, symbol: .musicNote) }
-                        .buttonStyle(.plain)
-                }
-                if showsMore {
-                    Menu {
-                        ForEach(car.moreControls) { control in
-                            Button(control.title) {
-                                if let plan = control.call { send(plan.call, car: car) }
-                            }
-                            .disabled(control.call == nil)
+        KhalaControlGrid(
+            controls: models(controls),
+            category: .car,
+            pending: pending,
+            hasExtras: showsMedia || showsMore,
+            onIntent: { control, intent in send(intent, on: control, car: car) }
+        ) {
+            if showsMedia, let player = car.mediaPlayerId {
+                Button { onMedia(player) } label: { extraTile(KhalaScreenText.media, symbol: .musicNote) }
+                    .buttonStyle(.plain)
+            }
+            if showsMore {
+                Menu {
+                    ForEach(models(car.moreControls)) { control in
+                        Button(control.title) {
+                            if let intent = control.tapIntent { send(intent, on: control, car: car) }
                         }
-                    } label: {
-                        extraTile(KhalaScreenText.more, symbol: .ellipsis)
+                        .disabled(control.tapIntent == nil)
                     }
+                } label: {
+                    extraTile(KhalaScreenText.more, symbol: .ellipsis)
                 }
+            }
+        }
+    }
+
+    /// The layout's tiles as the grid's models.
+    private func models(_ controls: [KhalaControl]) -> [KhalaControlModel] {
+        controls.compactMap { control in
+            live.entitiesById[control.entityId].map {
+                KhalaControlModel(control, entity: $0, attributes: live.attributes[control.entityId] ?? [:])
             }
         }
     }
@@ -270,9 +282,9 @@ struct KhalaCarView: View {
     private func extraTile(_ title: String, symbol: SFSymbol) -> some View {
         VStack(spacing: 6) {
             Image(systemSymbol: symbol)
-                .font(.system(size: 20, weight: .medium))
+                .font(KhalaTheme.tileGlyph)
             Text(title)
-                .font(.system(size: 12, weight: .semibold))
+                .font(KhalaTheme.tileLabel)
         }
         .foregroundStyle(KhalaTheme.ink)
         .frame(maxWidth: .infinity)
@@ -282,26 +294,33 @@ struct KhalaCarView: View {
         .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
-    /// Sends a car command: wakes the car first while it is asleep or offline (and waits for it), then sends the
-    /// command, then reads the car again so the screen shows the result.
-    private func send(_ call: KhalaServiceCall, car: KhalaCarLayout) {
+    /// Sends a car command through the shared pending store: the control shows its new state at once, the car is
+    /// woken first while it is asleep or offline (and waited for), then the command goes out and the car is read
+    /// again so the screen settles on the real result. A double tap while it is out is dropped.
+    private func send(_ intent: KhalaIntent, on control: KhalaControlModel, car: KhalaCarLayout) {
         Task {
-            if call.entityId != car.wakeButtonId, car.wakePlan != .none {
-                guard await wake() else {
-                    sync = .didntWake
-                    UINotificationFeedbackGenerator().notificationOccurred(.error)
-                    return
-                }
-                sync = .idle
-            }
-            guard await actions.perform(call) else { return }
+            let needsWake = control.entityId != car.wakeButtonId && car.wakePlan != .none
+            let prepare: (() async -> Bool)? = needsWake ? { await wakeForCommand() } : nil
+            let ok = await pending.run(intent, on: control, live: live, actions: actions, prepare: prepare)
+            guard ok else { return }
             let key = actions.refreshKey(device.id)
             guard KhalaScreenActions.refreshes.begin(key) else { return }
             sync = .updating
-            let ok = await actions.updateEntities(of: live.members(of: device))
-            KhalaScreenActions.refreshes.finish(key, now: Current.date(), completed: ok)
+            let updated = await actions.updateEntities(of: live.members(of: device))
+            KhalaScreenActions.refreshes.finish(key, now: Current.date(), completed: updated)
             sync = .idle
         }
+    }
+
+    /// The wake before a command; "Car didn't wake" and the error haptic when it doesn't.
+    private func wakeForCommand() async -> Bool {
+        guard await wake() else {
+            sync = .didntWake
+            UINotificationFeedbackGenerator().notificationOccurred(.error)
+            return false
+        }
+        sync = .idle
+        return true
     }
 
     // MARK: - Climate
@@ -309,10 +328,17 @@ struct KhalaCarView: View {
     @ViewBuilder
     private func climate(_ car: KhalaCarLayout) -> some View {
         if let climate = car.climate {
+            let power = pending.shown(KhalaControlModel(
+                entityId: climate.entityId, title: KhalaScreenText.climate, symbol: .sf("fanblades"),
+                kind: .toggle(isOn: climate.isOn), confirm: nil
+            ))
+            let isOn = power.toggleIsOn ?? climate.isOn
             VStack(spacing: 16) {
                 if let target = climate.target {
-                    KhalaNumberStepper(setting: target, category: .car, large: true) { value in
-                        send(climate.setTarget(value), car: car)
+                    let control = KhalaControlModel.stepper(target, symbolName: "thermometer.medium")
+                    KhalaNumberStepper(setting: pending.shown(control).numberSetting ?? target, category: .car,
+                                       large: true) { value in
+                        if let intent = control.valueIntent(value) { send(intent, on: control, car: car) }
                     }
                 }
                 HStack(spacing: 20) {
@@ -324,18 +350,18 @@ struct KhalaCarView: View {
                     }
                 }
                 Button {
-                    send(climate.power(on: !climate.isOn), car: car)
+                    send(.setOn(!isOn), on: power, car: car)
                 } label: {
                     Label(
-                        climate.isOn ? KhalaScreenText.stop : KhalaScreenText.start,
-                        systemSymbol: climate.isOn ? .stopFill : .playFill
+                        isOn ? KhalaScreenText.stop : KhalaScreenText.start,
+                        systemSymbol: isOn ? .stopFill : .playFill
                     )
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(climate.isOn ? KhalaTheme.ink : Color.white)
+                    .font(KhalaTheme.rowTitle)
+                    .foregroundStyle(isOn ? KhalaTheme.ink : Color.white)
                     .frame(maxWidth: .infinity)
                     .frame(height: 52)
                     .background(
-                        climate.isOn ? KhalaTheme.groundFlat : KhalaTheme.accent(.car),
+                        isOn ? KhalaTheme.groundFlat : KhalaTheme.accent(.car),
                         in: Capsule()
                     )
                 }
@@ -355,7 +381,7 @@ struct KhalaCarView: View {
     private func temperature(_ title: String, _ value: Double) -> some View {
         VStack(spacing: 2) {
             Text(KhalaText.measurement(value, unit: "°"))
-                .font(.system(size: 17, weight: .semibold))
+                .font(KhalaTheme.figure)
                 .foregroundStyle(KhalaTheme.ink)
             Text(title)
                 .font(KhalaTheme.secondaryText)
@@ -371,12 +397,12 @@ struct KhalaCarView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .lastTextBaseline) {
                 Text(car.battery.map { "\(Int($0.rounded()))%" } ?? "—")
-                    .font(.system(size: 44, weight: .semibold))
+                    .font(KhalaTheme.heroFigureSmall)
                     .foregroundStyle(KhalaTheme.ink)
                 Spacer()
                 if let text = car.chargingText {
                     Text(text)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(KhalaTheme.rowValue)
                         .foregroundStyle(car.isCharging ? KhalaTheme.accent(.car) : KhalaTheme.tertiary)
                 }
             }
@@ -385,14 +411,16 @@ struct KhalaCarView: View {
                     .padding(.bottom, 6)
             }
             if let limit = car.chargeLimit {
-                KhalaNumberStepper(setting: limit, category: .car) { value in
-                    send(limit.call(value: value), car: car)
+                let control = KhalaControlModel.stepper(limit, symbolName: "bolt.fill")
+                KhalaNumberStepper(setting: pending.shown(control).numberSetting ?? limit, category: .car) { value in
+                    if let intent = control.valueIntent(value) { send(intent, on: control, car: car) }
                 }
                 .padding(.vertical, 6)
             }
             if let current = car.chargeCurrent {
-                KhalaNumberStepper(setting: current, category: .car) { value in
-                    send(current.call(value: value), car: car)
+                let control = KhalaControlModel.stepper(current, symbolName: "bolt.fill")
+                KhalaNumberStepper(setting: pending.shown(control).numberSetting ?? current, category: .car) { value in
+                    if let intent = control.valueIntent(value) { send(intent, on: control, car: car) }
                 }
                 .padding(.vertical, 6)
             }

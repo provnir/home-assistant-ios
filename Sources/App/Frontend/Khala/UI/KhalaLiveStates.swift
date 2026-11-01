@@ -16,11 +16,14 @@ final class KhalaLiveStates: ObservableObject {
     @Published private(set) var deviceModels: [String: String] = [:]
     /// `automation/config` answers by automation entity id.
     @Published private(set) var automationConfigs: [String: [String: Any]] = [:]
+    /// What the controls on screen show before Home Assistant confirms it (`KhalaPendingStore`).
+    let pending = KhalaPendingStore()
 
     func update(entities: [KhalaEntity], attributes: [String: [String: Any]]) {
         self.entities = entities
         entitiesById = Dictionary(entities.map { ($0.entityId, $0) }, uniquingKeysWith: { first, _ in first })
         self.attributes = attributes
+        pending.reconcile(entities: entitiesById, attributes: attributes)
     }
 
     func update(platforms: [String: String], deviceModels: [String: String]) {

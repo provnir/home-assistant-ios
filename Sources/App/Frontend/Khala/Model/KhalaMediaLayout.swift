@@ -46,6 +46,44 @@ struct KhalaMediaLayout: Equatable {
         }
     }
 
+    /// The sheet's controls for the one control grid, in its order: power, volume (only while on), sources, sound
+    /// mode (enabled only while on).
+    var controls: [KhalaControlModel] {
+        var controls: [KhalaControlModel] = []
+        if canPower {
+            var power = KhalaControlModel(entityId: entityId, title: KhalaScreenText.power, symbol: .sf("power"),
+                                          kind: .toggle(isOn: isOn), confirm: nil)
+            power.stateText = isOn ? KhalaScreenText.on : KhalaScreenText.off
+            power.isAvailable = !isUnavailable
+            controls.append(power)
+        }
+        if let volume, isOn {
+            var slider = KhalaControlModel(entityId: entityId, title: KhalaScreenText.volume,
+                                           symbol: .sf("speaker.wave.2.fill"), kind: .slider(.volume, value: volume),
+                                           confirm: nil)
+            slider.stateText = Self.volumeText(volume)
+            controls.append(slider)
+        }
+        if !sources.isEmpty {
+            var choice = KhalaControlModel(entityId: entityId, title: KhalaScreenText.source, symbol: .sf("play.fill"),
+                                           kind: .choice(current: isOn ? source : nil, options: sources,
+                                                         field: .source),
+                                           confirm: nil)
+            choice.stateText = source ?? ""
+            controls.append(choice)
+        }
+        if !soundModes.isEmpty {
+            var choice = KhalaControlModel(entityId: entityId, title: KhalaScreenText.soundMode,
+                                           symbol: .sf("chevron.up.chevron.down"),
+                                           kind: .choice(current: soundMode, options: soundModes, field: .soundMode),
+                                           confirm: nil)
+            choice.stateText = soundMode ?? ""
+            choice.isAvailable = isOn
+            controls.append(choice)
+        }
+        return controls
+    }
+
     func power(on: Bool) -> KhalaServiceCall {
         KhalaServiceCall("media_player", on ? "turn_on" : "turn_off", entityId: entityId)
     }

@@ -20,7 +20,7 @@ struct KhalaVolumeSlider: View {
                     .fill(KhalaTheme.accent(.media))
                     .frame(width: max(0, min(width, width * shown)))
                 Image(systemSymbol: shown == 0 ? .speakerSlashFill : .speakerWave2Fill)
-                    .font(.system(size: 18, weight: .semibold))
+                    .font(KhalaTheme.sliderGlyph)
                     .foregroundStyle(shown > 0.08 ? Color.white : KhalaTheme.secondary)
                     .padding(.leading, 18)
             }

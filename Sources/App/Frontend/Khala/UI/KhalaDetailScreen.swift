@@ -36,6 +36,7 @@ struct KhalaDetailScreen: View {
                     KhalaCarView(
                         device: device,
                         live: live,
+                        pending: live.pending,
                         actions: actions,
                         calendar: home.calendar,
                         onMedia: { entityId in shell.route(.mediaSheet(deviceId: device.id, entityId: entityId)) }

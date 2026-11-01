@@ -9,7 +9,7 @@ struct KhalaControlModelTests {
                                          step: 0.5, unit: "°")
         let stepper = KhalaControlModel(entityId: "climate.x", title: "Target", symbol: .sf("thermometer.medium"),
                                         kind: .stepper(setting), confirm: nil)
-        #expect(stepper.id == "climate.x")
+        #expect(stepper.id == "climate.x#value")
         #expect(stepper == KhalaControlModel(entityId: "climate.x", title: "Target", symbol: .sf("thermometer.medium"),
                                              kind: .stepper(setting), confirm: nil))
         let gate = KhalaControlModel(entityId: "cover.g", title: "Gate", symbol: .mdi("mdi:gate"),

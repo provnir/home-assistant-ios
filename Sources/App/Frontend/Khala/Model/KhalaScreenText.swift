@@ -124,6 +124,14 @@ enum KhalaScreenText {
 
     static func confirmAction(_ title: String) -> String { "\(title)?" }
 
+    /// The confirming button of a control that asks first ("Unlock lock", "Open charge port door"), as 41.1 words it.
+    static func confirmTitle(_ confirm: KhalaConfirm, control title: String) -> String {
+        switch confirm {
+        case .unlock: return "Unlock \(title.lowercased())"
+        case .open: return "Open \(title.lowercased())"
+        }
+    }
+
     /// Words for a car's charging state (`sensor.*_charging` enum).
     static func chargingState(_ state: String) -> String {
         switch state {

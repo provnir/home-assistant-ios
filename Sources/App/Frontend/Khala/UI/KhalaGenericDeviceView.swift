@@ -19,7 +19,11 @@ struct KhalaGenericDeviceView: View {
         let primary = live.entitiesById[primaryEntityId]
         let members = memberEntityIds.compactMap { live.entitiesById[$0] }.filter { !$0.isAuxiliary }
         let others = members.filter { $0.entityId != primaryEntityId }
-        let controls = others.compactMap { KhalaControl.make($0, attributes: live.attributes[$0.entityId] ?? [:]) }
+        let controls = others.compactMap { entity in
+            KhalaControl.make(entity, attributes: live.attributes[entity.entityId] ?? [:]).map {
+                KhalaControlModel($0, entity: entity, attributes: live.attributes[entity.entityId] ?? [:])
+            }
+        }
         let controlIds = Set(controls.map(\.entityId))
         let readings = others.filter { !controlIds.contains($0.entityId) }
         KhalaDeviceScreen(
@@ -31,41 +35,32 @@ struct KhalaGenericDeviceView: View {
             trailing: { EmptyView() },
             content: {
                 if let primary {
+                    // The face: a Power row when it switches, else its tile; then one tile per other control.
                     if Self.switchable.contains(primary.domain) {
-                        let isOn = primary.state == "on"
-                        HStack {
-                            Image(systemSymbol: KhalaTheme.symbol(category))
-                                .font(.system(size: 19, weight: .medium))
-                                .foregroundStyle(KhalaTheme.accent(category))
-                                .frame(width: 44, height: 44)
-                                .background(KhalaTheme.tint(category), in: Circle())
-                            Text(KhalaScreenText.power)
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(KhalaTheme.ink)
-                            Spacer()
-                            Toggle(KhalaScreenText.power, isOn: Binding(
-                                get: { isOn },
-                                set: { on in Task { await actions.perform(.power(primary.entityId, on: on)) } }
-                            ))
-                            .labelsHidden()
-                            .tint(KhalaTheme.accent(category))
-                            .disabled(primary.state == "unavailable")
-                        }
-                        .khalaCard(padding: 14, radius: 22)
-                    } else if let control = KhalaControl.make(primary, attributes: live.attributes[primary.entityId] ?? [:]) {
-                        KhalaControlTile(control: control, category: category) { call in
-                            Task { await actions.perform(call) }
-                        }
+                        KhalaControlGrid(
+                            controls: [.power(primary, title: KhalaScreenText.power,
+                                              symbolName: KhalaTheme.symbol(category).rawValue)],
+                            style: .card,
+                            category: category,
+                            pending: live.pending,
+                            onIntent: run
+                        )
+                    } else if let control = KhalaControl.make(
+                        primary,
+                        attributes: live.attributes[primary.entityId] ?? [:]
+                    ) {
+                        KhalaControlGrid(
+                            controls: [KhalaControlModel(control, entity: primary,
+                                                         attributes: live.attributes[primary.entityId] ?? [:])],
+                            style: .tiles(columns: 1),
+                            category: category,
+                            pending: live.pending,
+                            onIntent: run
+                        )
                     }
                     if !controls.isEmpty {
-                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
-                            ForEach(controls) { control in
-                                KhalaControlTile(control: control, category: category) { call in
-                                    Task { await actions.perform(call) }
-                                }
-                            }
-                        }
-                        .padding(.top, 16)
+                        KhalaControlGrid(controls: controls, category: category, pending: live.pending, onIntent: run)
+                            .padding(.top, 16)
                     }
                     if !readings.isEmpty {
                         KhalaSectionHeader(title: KhalaScreenText.members)
@@ -96,5 +91,9 @@ struct KhalaGenericDeviceView: View {
                 }
             }
         )
+    }
+
+    private func run(_ control: KhalaControlModel, _ intent: KhalaIntent) {
+        Task { await live.pending.run(intent, on: control, live: live, actions: actions) }
     }
 }

@@ -31,6 +31,12 @@ struct KhalaNumberSetting: Equatable {
         self.unit = unit
     }
 
+    /// The same setting showing `value` (the optimistic overlay).
+    func with(value newValue: Double) -> KhalaNumberSetting {
+        KhalaNumberSetting(entityId: entityId, title: title, value: newValue, minimum: minimum, maximum: maximum,
+                           step: step, unit: unit)
+    }
+
     /// `value` moved by `steps` steps, kept in bounds and on the step grid.
     func stepped(_ steps: Int) -> Double {
         let raw = value + Double(steps) * step

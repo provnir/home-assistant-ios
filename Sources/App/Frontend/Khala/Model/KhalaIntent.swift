@@ -8,6 +8,8 @@ enum KhalaIntent: Equatable {
     case press
     case set(KhalaSlider, Double)
     case setTemperature(Double)
+    /// `number` / `input_number` `set_value`.
+    case setNumber(Double)
     case choose(KhalaChoiceField, String)
     case command(KhalaCommand)
     case lock

@@ -2,8 +2,8 @@ import SFSafeSymbols
 import SwiftUI
 
 /// − value + for a `KhalaNumberSetting` (charge limit, charge current, climate target). Taps move a local value at
-/// once and send it after a short pause, so five quick taps are one call; the value from Home Assistant takes
-/// over again when it arrives.
+/// once and send it after a 300 ms pause, so five quick taps are one call; the grid's pending overlay then shows
+/// the sent value until Home Assistant's own takes over.
 struct KhalaNumberStepper: View {
     let setting: KhalaNumberSetting
     let category: KhalaCategory
@@ -24,7 +24,7 @@ struct KhalaNumberStepper: View {
             }
             roundButton(.minus, enabled: shown > setting.minimum) { step(-1) }
             Text(KhalaText.measurement(shown, unit: setting.unit))
-                .font(large ? .system(size: 44, weight: .semibold) : .system(size: 17, weight: .semibold))
+                .font(large ? KhalaTheme.stepperValueLarge : KhalaTheme.stepperValue)
                 .monospacedDigit()
                 .foregroundStyle(KhalaTheme.ink)
                 .frame(minWidth: large ? 120 : 64)
@@ -41,7 +41,7 @@ struct KhalaNumberStepper: View {
     private func roundButton(_ symbol: SFSymbol, enabled: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemSymbol: symbol)
-                .font(.system(size: large ? 20 : 15, weight: .semibold))
+                .font(large ? KhalaTheme.stepperGlyphLarge : KhalaTheme.stepperGlyph)
                 .foregroundStyle(KhalaTheme.ink)
                 .frame(width: large ? 52 : 40, height: large ? 52 : 40)
                 .background(KhalaTheme.groundFlat, in: Circle())
@@ -65,7 +65,7 @@ struct KhalaNumberStepper: View {
         pending = next
         sendTask?.cancel()
         sendTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 600_000_000)
+            try? await Task.sleep(nanoseconds: 300_000_000)
             guard !Task.isCancelled else { return }
             onSet(next)
         }

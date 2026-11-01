@@ -1,4 +1,5 @@
 import SFSafeSymbols
+import Shared
 import SwiftUI
 import UIKit
 
@@ -83,6 +84,26 @@ enum KhalaTheme {
     static let menuRowSelected = Font.system(size: 16, weight: .semibold)
     static let menuTrailing = Font.system(size: 14)
     static let caption = Font.system(size: 12, weight: .bold)
+    /// Controls (`KhalaControlGrid`): tile glyph and label, a row's title and value, a sheet section's label.
+    static let tileGlyph = Font.system(size: 20, weight: .medium)
+    static let tileLabel = Font.system(size: 12, weight: .semibold)
+    static let chipGlyph = Font.system(size: 19, weight: .medium)
+    static let rowTitle = Font.system(size: 16, weight: .semibold)
+    static let rowValue = Font.system(size: 15, weight: .semibold)
+    static let rowGlyph = Font.system(size: 14, weight: .semibold)
+    static let smallGlyph = Font.system(size: 13, weight: .semibold)
+    static let sectionLabel = Font.system(size: 13, weight: .bold)
+    static let sliderGlyph = Font.system(size: 18, weight: .semibold)
+    static let stepperValue = Font.system(size: 17, weight: .semibold)
+    static let stepperValueLarge = Font.system(size: 44, weight: .semibold)
+    static let stepperGlyph = Font.system(size: 15, weight: .semibold)
+    static let stepperGlyphLarge = Font.system(size: 20, weight: .semibold)
+    /// The car's battery figure on Overview (52) and Charging (44), and a reading beside it (range, temperatures).
+    static let heroFigure = Font.system(size: 52, weight: .semibold)
+    static let heroFigureSmall = Font.system(size: 44, weight: .semibold)
+    static let figure = Font.system(size: 17, weight: .semibold)
+    static let sheetTitle = Font.system(size: 22, weight: .bold)
+    static let sheetSubtitle = Font.system(size: 14)
 
     // MARK: - Metrics
 
@@ -115,6 +136,18 @@ enum KhalaTheme {
         case .automations: return .wandAndStars
         case .dashboards: return .squareGrid2x2
         case .settings: return .gearshape
+        }
+    }
+
+    /// A control's glyph: an SF Symbol, or HA's Material Design icon when no SF Symbol maps.
+    static func image(_ glyph: KhalaGlyph) -> Image {
+        switch glyph {
+        case let .sf(name):
+            return Image(systemSymbol: SFSymbol(rawValue: name))
+        case let .mdi(name):
+            let icon = MaterialDesignIcons(serversideValueNamed: name, fallback: .helpCircleIcon)
+            return Image(uiImage: icon.image(ofSize: CGSize(width: 24, height: 24), color: nil))
+                .renderingMode(.template)
         }
     }
 

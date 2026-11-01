@@ -1,8 +1,9 @@
 import Foundation
 
-/// One control on any surface — device screens, the car's tabs, the generic screen, the media sheet, Now chips —
-/// as the single grid of slice 2 will draw it (DESCRIPTORS-DESIGN.md §2). Slice 1 defines the shape only; today's
-/// tiles still come from `KhalaControl`. The optimistic `pending` overlay joins with `KhalaPendingStore` in slice 2.
+/// One control on any surface — device screens, the car's tabs, the generic screen, the media sheet — as the single
+/// `KhalaControlGrid` draws it (DESCRIPTORS-DESIGN.md §2). A tap becomes a `KhalaIntent` (`tapIntent`), which the
+/// iOS-side `KhalaUpstreamBridge` turns into a service call; `pending` is the optimistic overlay
+/// (`KhalaPendingBook`) the control shows until Home Assistant echoes it, fails it or it times out.
 struct KhalaControlModel: Identifiable, Equatable {
     enum Kind: Equatable {
         case toggle(isOn: Bool)
@@ -16,12 +17,187 @@ struct KhalaControlModel: Identifiable, Equatable {
         case commands([KhalaCommand])
     }
 
+    /// Which way a two-way control (toggle, lock) can go: a frunk that only opens, a cover without close.
+    struct Directions: Equatable {
+        /// Turn on / open / lock.
+        var on = true
+        /// Turn off / close / unlock.
+        var off = true
+
+        static let both = Directions()
+    }
+
     let entityId: String
     /// `KhalaEntity.nameWithoutDevice`: HA's own, already localised name.
     let title: String
     let symbol: KhalaGlyph
     let kind: Kind
+    /// Asks before the dangerous direction (unlocking, opening). Which intent that is: `confirmation(for:)`.
     let confirm: KhalaConfirm?
+    /// The state in words ("Locked", "On", "…"), shown on lock tiles and read by VoiceOver.
+    var stateText: String = ""
+    /// False while Home Assistant reports the entity unavailable (or a lock's state is still unknown).
+    var isAvailable = true
+    var directions: Directions = .both
+    /// The optimistic overlay; set by `showing(_:)`.
+    var pending: KhalaPending?
 
-    var id: String { entityId }
+    /// Unique per control, not per entity: a media player is a power toggle, a volume slider and two choices.
+    /// Also the key of its `KhalaPendingBook` entry, so a volume change never shows on the power switch.
+    var id: String { "\(entityId)#\(slot)" }
+
+    /// Which of an entity's controls this is.
+    var slot: String {
+        switch kind {
+        case .toggle: return "power"
+        case .slider: return "slider"
+        case .stepper: return "value"
+        case let .choice(_, _, field): return field.rawValue
+        case .press: return "press"
+        case .lock: return "lock"
+        case .commands: return "commands"
+        }
+    }
+
+    /// The entity's domain (`switch`, `cover`…).
+    var domain: String {
+        entityId.split(separator: ".", maxSplits: 1).first.map(String.init) ?? entityId
+    }
+}
+
+extension KhalaControlModel {
+    /// Drawn tinted: on, open, locked, a select with a value, a press on its way.
+    var isActive: Bool {
+        switch kind {
+        case let .toggle(isOn): return isOn
+        case let .lock(isLocked, _): return isLocked
+        case let .choice(current, _, _):
+            guard let current else { return false }
+            return !["off", "unavailable", "unknown"].contains(current)
+        case .press, .commands: return pending != nil
+        case .slider, .stepper: return false
+        }
+    }
+
+    /// Whether a tap can do anything right now (on the state as shown, pending included).
+    var isEnabled: Bool {
+        guard isAvailable else { return false }
+        switch kind {
+        case let .toggle(isOn): return isOn ? directions.off : directions.on
+        case let .lock(isLocked, _): return isLocked ? directions.off : directions.on
+        case let .choice(_, options, _): return !options.isEmpty
+        case .press, .slider, .stepper, .commands: return true
+        }
+    }
+
+    /// What a plain tap asks for: always explicit (`setOn(false)`, `.unlock`), never a blind toggle, so a
+    /// repeated tap can't flip a state back by accident. Nil for controls a tap doesn't drive (sliders, steppers,
+    /// choices open their own UI).
+    var tapIntent: KhalaIntent? {
+        guard isEnabled else { return nil }
+        switch kind {
+        case let .toggle(isOn): return .setOn(!isOn)
+        case let .lock(isLocked, _): return isLocked ? .unlock : .lock
+        case .press: return .press
+        case .slider, .stepper, .choice, .commands: return nil
+        }
+    }
+
+    /// The intent for a value picked on a slider or stepper: a climate target, a `number`, a light's brightness…
+    func valueIntent(_ value: Double) -> KhalaIntent? {
+        switch kind {
+        case let .slider(slider, _): return .set(slider, value)
+        case .stepper: return domain == "climate" ? .setTemperature(value) : .setNumber(value)
+        case .toggle, .choice, .press, .lock, .commands: return nil
+        }
+    }
+
+    /// The question to ask before `intent`, or nil to send it at once. Unlocking always asks; opening asks for a
+    /// control that declares it (a cover tile opens on `setOn(true)`).
+    func confirmation(for intent: KhalaIntent) -> KhalaConfirm? {
+        switch (confirm, intent) {
+        case (.unlock?, .unlock): return .unlock
+        case let (.open(deviceClass)?, .open), let (.open(deviceClass)?, .setOn(true)):
+            return .open(deviceClass: deviceClass)
+        default: return nil
+        }
+    }
+
+    /// The control as it should look with `pending` laid over it: a toggle already flipped, a stepper already on
+    /// its new value. Nil `pending` gives the plain control.
+    func showing(_ pending: KhalaPending?) -> KhalaControlModel {
+        var shown = self
+        shown.pending = pending
+        guard let pending else { return shown }
+        switch (kind, pending.value) {
+        case let (.toggle, .on(isOn)):
+            shown = shown.with(kind: .toggle(isOn: isOn), stateText: isOn ? KhalaScreenText.on : KhalaScreenText.off)
+        case let (.lock(_, canOpen), .locked(isLocked)):
+            shown = shown.with(
+                kind: .lock(isLocked: isLocked, canOpen: canOpen),
+                stateText: KhalaText.humanized(state: isLocked ? "locked" : "unlocked"),
+                symbol: .sf(isLocked ? KhalaControl.Glyph.lock.symbolName : KhalaControl.Glyph.unlock.symbolName)
+            )
+        case let (.stepper(setting), .number(value)):
+            shown = shown.with(kind: .stepper(setting.with(value: value)), stateText: setting.with(value: value).text)
+        case let (.slider(slider, _), .number(value)):
+            shown = shown.with(kind: .slider(slider, value: value), stateText: stateText)
+        case let (.choice(_, options, field), .option(option)):
+            shown = shown.with(
+                kind: .choice(current: option, options: options, field: field),
+                stateText: KhalaText.humanized(state: option)
+            )
+        default:
+            break
+        }
+        return shown
+    }
+
+    /// The pending entry `intent` starts on this control: what it shows and what proves it landed. Nil for an
+    /// intent with nothing to show (`timedOn`, decided by hint data in a later slice).
+    func pendingValue(for intent: KhalaIntent) -> (value: KhalaPendingValue, echo: KhalaPendingEcho)? {
+        switch intent {
+        case let .setOn(isOn):
+            return (.on(isOn), KhalaPendingEcho.power(domain: domain, on: isOn))
+        case .toggle:
+            guard case let .toggle(isOn) = kind else { return nil }
+            return (.on(!isOn), KhalaPendingEcho.power(domain: domain, on: !isOn))
+        case .lock:
+            return (.locked(true), .state(["locked", "locking"]))
+        case .unlock:
+            return (.locked(false), .state(["unlocked", "unlocking", "open", "opening"]))
+        case .open:
+            return domain == "lock"
+                ? (.locked(false), .state(["open", "opening", "unlocked"]))
+                : (.on(true), .state(["open", "opening"]))
+        case .press, .command:
+            return (.pressed, .none)
+        case let .set(slider, value):
+            switch slider {
+            case .volume: return (.number(value), .attributeNumber("volume_level", value, tolerance: 0.011))
+            case .brightness: return (.number(value), .attributeNumber("brightness", value * 2.55, tolerance: 3))
+            case .position: return (.number(value), .attributeNumber("current_position", value, tolerance: 1))
+            case .percentage: return (.number(value), .attributeNumber("percentage", value, tolerance: 1))
+            }
+        case let .setTemperature(value):
+            return (.number(value), .attributeNumber("temperature", value, tolerance: 0.01))
+        case let .setNumber(value):
+            return (.number(value), .stateNumber(value, tolerance: 0.0001))
+        case let .choose(field, option):
+            return (.option(option), KhalaPendingEcho.choice(field, option))
+        case .timedOn:
+            return nil
+        }
+    }
+
+    private func with(kind: Kind, stateText: String, symbol: KhalaGlyph? = nil) -> KhalaControlModel {
+        var copy = KhalaControlModel(
+            entityId: entityId, title: title, symbol: symbol ?? self.symbol, kind: kind, confirm: confirm
+        )
+        copy.stateText = stateText
+        copy.isAvailable = isAvailable
+        copy.directions = directions
+        copy.pending = pending
+        return copy
+    }
 }
