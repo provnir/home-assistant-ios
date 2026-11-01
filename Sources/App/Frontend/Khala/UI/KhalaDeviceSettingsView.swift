@@ -50,6 +50,11 @@ struct KhalaDeviceSettingsView: View {
                                     Text(role.displayName).tag(role)
                                 }
                             }
+                            Picker(KhalaText.showAs, selection: $assignment.showAs) {
+                                ForEach(KhalaKind.showAsChoices(including: assignment.kind), id: \.self) { kind in
+                                    Text(kind.displayName).tag(kind)
+                                }
+                            }
                         }
                         .padding(.vertical, 4)
                     }

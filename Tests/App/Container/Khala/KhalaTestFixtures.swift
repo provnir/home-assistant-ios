@@ -23,7 +23,9 @@ enum KhalaTestFixtures {
         _ attributes: [String: Any] = [:],
         device: String? = nil,
         deviceName: String? = nil,
-        auxiliary: Bool = false
+        auxiliary: Bool = false,
+        platform: String? = nil,
+        translationKey: String? = nil
     ) -> KhalaEntity {
         KhalaEntity(
             entityId: entityId,
@@ -32,7 +34,9 @@ enum KhalaTestFixtures {
             attributes: attributes,
             deviceId: device,
             deviceName: deviceName,
-            isAuxiliary: auxiliary
+            isAuxiliary: auxiliary,
+            platform: platform,
+            translationKey: translationKey
         )
     }
 
@@ -60,17 +64,23 @@ enum KhalaTestFixtures {
             ], device: "dev-yard", deviceName: "Yard"),
 
             entity("device_tracker.rover_location", "not_home", ["source_type": "gps", "friendly_name": "Rover Location"],
-                   device: "dev-rover", deviceName: "Rover"),
-            entity("lock.rover_lock", "locked", ["friendly_name": "Rover Lock"], device: "dev-rover", deviceName: "Rover"),
+                   device: "dev-rover", deviceName: "Rover",
+                   platform: "tesla_fleet", translationKey: "location"),
+            entity("lock.rover_lock", "locked", ["friendly_name": "Rover Lock"], device: "dev-rover", deviceName: "Rover",
+                   platform: "tesla_fleet", translationKey: "vehicle_state_locked"),
             entity("sensor.rover_battery_level", "72", [
                 "device_class": "battery", "unit_of_measurement": "%", "friendly_name": "Rover Battery level",
-            ], device: "dev-rover", deviceName: "Rover"),
-            entity("switch.rover_defrost", "off", ["friendly_name": "Rover Defrost"], device: "dev-rover", deviceName: "Rover"),
+            ], device: "dev-rover", deviceName: "Rover",
+                   platform: "tesla_fleet", translationKey: "charge_state_battery_level"),
+            entity("switch.rover_defrost", "off", ["friendly_name": "Rover Defrost"], device: "dev-rover", deviceName: "Rover",
+                   platform: "tesla_fleet", translationKey: "climate_state_defrost_mode"),
             entity("media_player.rover_media", "paused", ["device_class": "speaker", "friendly_name": "Rover Media"],
-                   device: "dev-rover", deviceName: "Rover"),
+                   device: "dev-rover", deviceName: "Rover",
+                   platform: "tesla_fleet", translationKey: "media"),
             entity("sensor.rover_time_to_full_charge", "2026-10-20T16:30:00+00:00", [
                 "device_class": "timestamp", "friendly_name": "Rover Time to full charge",
-            ], device: "dev-rover", deviceName: "Rover"),
+            ], device: "dev-rover", deviceName: "Rover",
+                   platform: "tesla_fleet", translationKey: "charge_state_minutes_to_full_charge"),
 
             entity("media_player.den_zone_2", "off", ["friendly_name": "Den Zone 2"], device: "dev-den", deviceName: "Den"),
             entity("media_player.den_receiver", "off", ["device_class": "receiver", "friendly_name": "Den Receiver"],

@@ -52,9 +52,9 @@ struct KhalaControl: Equatable, Identifiable {
 
 extension KhalaControl {
     /// A tile for `entity`, or nil for domains that make no tile.
-    static func make(_ entity: KhalaEntity, attributes: [String: Any]) -> KhalaControl? {
+    static func make(_ entity: KhalaEntity, attributes: [String: Any], hints: KhalaHints = .builtIn) -> KhalaControl? {
         let title = entity.nameWithoutDevice
-        let glyph = glyph(for: entity)
+        let glyph = glyph(for: entity, hints: hints)
         // Only `unavailable` blocks a tap: buttons sit at `unknown` until first pressed.
         let unavailable = entity.state == "unavailable"
         switch entity.domain {
@@ -132,24 +132,18 @@ extension KhalaControl {
         }
     }
 
-    /// The glyph for an entity, from its domain, device class and the words in its id and name.
-    static func glyph(for entity: KhalaEntity) -> Glyph {
-        let text = (entity.entityId + " " + entity.name).lowercased()
-        func has(_ words: String...) -> Bool { words.contains { text.contains($0) } }
+    /// The glyph for an entity: a lock's state, else its hint's glyph (`KhalaHints`, keyed on platform and
+    /// translation key), else its device class and domain. Names and ids are never read.
+    static func glyph(for entity: KhalaEntity, hints: KhalaHints = .builtIn) -> Glyph {
         if entity.domain == "lock" { return entity.state == "locked" ? .lock : .unlock }
-        if has("sentry", "guard", "alarm") { return .shield }
-        if has("charge_port", "charge port", "charger door", "charge_port_door") { return .chargePort }
-        if has("frunk") { return .frunk }
-        if has("trunk", "tailgate", "boot") { return .trunk }
-        if has("window") || entity.deviceClass == "window" { return .window }
-        if has("flash", "light") { return .lights }
-        if has("horn", "honk") { return .horn }
-        if has("steering") { return .wheel }
-        if has("seat") { return .seat }
-        if has("defrost") { return .defrost }
-        if has("fan", "climate") { return .fan }
-        if entity.domain == "button" { return .button }
-        if entity.domain == "switch" { return .power }
-        return .generic
+        if let glyph = hints.hint(for: entity)?.glyph { return glyph }
+        if entity.deviceClass == "window" { return .window }
+        switch entity.domain {
+        case "light": return .lights
+        case "fan", "climate": return .fan
+        case "button": return .button
+        case "switch": return .power
+        default: return .generic
+        }
     }
 }

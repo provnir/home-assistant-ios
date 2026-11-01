@@ -35,13 +35,15 @@ enum KhalaText {
     static let otherDevices = "Other"
     static let pinnedDevices = "Pinned devices"
     static let pinnedDevicesFooter = """
-    Pinned devices come first in the menu and on the Now card. The role picks the glyph and colour; the label \
-    replaces the entity's name.
+    Pinned devices come first in the menu and on the Now card. The role picks the colour and a starting screen; \
+    "Show as…" picks the screen (car, hot water, media, camera or a device page); the label replaces the \
+    entity's name.
     """
     static let addDevice = "Add a device"
     static let addDeviceFooter = "Any entity can be pinned: a relay that runs the water heater, a car's battery sensor, ..."
     static let label = "Label"
     static let role = "Role"
+    static let showAs = "Show as…"
     static let done = "Done"
     static let homeAssistantSection = "HOME ASSISTANT"
     static let thisAppSection = "THIS APP"

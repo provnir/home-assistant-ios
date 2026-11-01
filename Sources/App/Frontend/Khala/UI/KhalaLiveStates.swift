@@ -10,7 +10,7 @@ final class KhalaLiveStates: ObservableObject {
     @Published private(set) var entitiesById: [String: KhalaEntity] = [:]
     /// Raw attributes by entity id (`source_list`, `supported_features`, `min`/`max`...).
     @Published private(set) var attributes: [String: [String: Any]] = [:]
-    /// The integration of each entity, from the entity registry (`switcher_kis`, `tesla_fleet`...).
+    /// The integration of each entity, from the entity registry (`KhalaEntity.platform` too).
     @Published private(set) var platforms: [String: String] = [:]
     /// Registry device model by device id ("Model 3").
     @Published private(set) var deviceModels: [String: String] = [:]

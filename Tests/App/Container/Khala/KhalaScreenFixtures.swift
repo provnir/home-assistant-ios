@@ -2,14 +2,52 @@ import Foundation
 @testable import HomeAssistant
 
 /// Synthetic devices for the device-screen tests, shaped like real integrations (a Tesla Fleet car, a Denon-style
-/// receiver, a Switcher water heater, cameras with event entities) but with made-up ids and names.
+/// receiver, a Switcher water heater, cameras with event entities) but with made-up ids and names. The car and the
+/// heater carry the registry facts those integrations give their entities (platform, translation key), which is
+/// what the hints file reads.
 enum KhalaScreenFixtures {
     private typealias Base = KhalaTestFixtures
 
     static func entity(_ id: String, _ state: String, _ attributes: [String: Any] = [:], device: String? = nil,
-                       deviceName: String? = nil, auxiliary: Bool = false) -> KhalaEntity {
-        Base.entity(id, state, attributes, device: device, deviceName: deviceName, auxiliary: auxiliary)
+                       deviceName: String? = nil, auxiliary: Bool = false, platform: String? = nil,
+                       translationKey: String? = nil) -> KhalaEntity {
+        Base.entity(id, state, attributes, device: device, deviceName: deviceName, auxiliary: auxiliary,
+                    platform: platform, translationKey: translationKey)
     }
+
+    /// The registry's `translation_key` of each synthetic car entity: the keys Home Assistant's `tesla_fleet`
+    /// integration gives these entities (what the hints file is keyed on; the update entity has none).
+    static let carTranslationKeys: [String: String] = [
+        "device_tracker.rover_location": "location",
+        "device_tracker.rover_route": "route",
+        "lock.rover_lock": "vehicle_state_locked",
+        "lock.rover_charge_cable_lock": "charge_state_charge_port_latch",
+        "sensor.rover_battery_level": "charge_state_battery_level",
+        "sensor.rover_battery_range": "charge_state_battery_range",
+        "sensor.rover_charging": "charge_state_charging_state",
+        "sensor.rover_charger_power": "charge_state_charger_power",
+        "sensor.rover_inside_temperature": "climate_state_inside_temp",
+        "sensor.rover_outside_temperature": "climate_state_outside_temp",
+        "number.rover_charge_limit": "charge_state_charge_limit_soc",
+        "number.rover_charge_current": "charge_state_charge_current_request",
+        "binary_sensor.rover_status": "state",
+        "binary_sensor.rover_charge_cable": "charge_state_conn_charge_cable",
+        "climate.rover_climate": "driver_temp",
+        "switch.rover_sentry_mode": "vehicle_state_sentry_mode",
+        "switch.rover_defrost": "climate_state_defrost_mode",
+        "switch.rover_charge": "charge_state_charging_state",
+        "switch.rover_auto_seat_climate_left": "climate_state_auto_seat_climate_left",
+        "cover.rover_charge_port_door": "charge_state_charge_port_door_open",
+        "cover.rover_frunk": "vehicle_state_ft",
+        "cover.rover_trunk": "vehicle_state_rt",
+        "button.rover_wake": "wake",
+        "button.rover_flash_lights": "flash_lights",
+        "button.rover_honk_horn": "honk",
+        "button.rover_homelink": "homelink",
+        "button.rover_play_sound": "boombox",
+        "media_player.rover_media_player": "media",
+        "select.rover_seat_heater_front_left": "climate_state_seat_heater_left",
+    ]
 
     // MARK: - Car
 
@@ -32,7 +70,8 @@ enum KhalaScreenFixtures {
         func car(_ id: String, _ state: String, _ attributes: [String: Any] = [:], auxiliary: Bool = false) -> KhalaEntity {
             var merged = carAttributes[id] ?? [:]
             for (key, value) in attributes { merged[key] = value }
-            return entity(id, state, merged, device: "dev-rover", deviceName: "Rover", auxiliary: auxiliary)
+            return entity(id, state, merged, device: "dev-rover", deviceName: "Rover", auxiliary: auxiliary,
+                          platform: "tesla_fleet", translationKey: carTranslationKeys[id])
         }
         return [
             car("device_tracker.rover_location", "home", ["friendly_name": "Rover Location"]),
@@ -80,11 +119,11 @@ enum KhalaScreenFixtures {
     static var heater: [KhalaEntity] {
         [
             entity("switch.tank_9", "on", ["device_class": "switch", "friendly_name": "Tank 9"],
-                   device: "dev-tank", deviceName: "Tank 9"),
+                   device: "dev-tank", deviceName: "Tank 9", platform: "switcher_kis"),
             entity("sensor.tank_9_remaining_time", "00:32:10", ["friendly_name": "Tank 9 Remaining time"],
-                   device: "dev-tank", deviceName: "Tank 9"),
+                   device: "dev-tank", deviceName: "Tank 9", platform: "switcher_kis", translationKey: "remaining_time"),
             entity("sensor.tank_9_power", "2450", ["device_class": "power", "unit_of_measurement": "W"],
-                   device: "dev-tank", deviceName: "Tank 9"),
+                   device: "dev-tank", deviceName: "Tank 9", platform: "switcher_kis"),
             entity("input_boolean.backup_booked", "off", ["friendly_name": "Backup booked"]),
             entity("automation.backup_check", "on", ["friendly_name": "Backup check"]),
             entity("automation.backup_heat", "off", ["friendly_name": "Backup heat"]),

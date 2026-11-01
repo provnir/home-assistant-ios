@@ -4,8 +4,8 @@ import Foundation
 /// Integration-specific knowledge is NOT here; it is data (the hints file, a later slice).
 ///
 /// `KhalaDeviceCatalog` detects climate, locks, covers (slice 4), fans, light groups, lights and switches (slice 3)
-/// through this table; car, water heater and media still go through its own rules until slice 5, and vacuums are
-/// not detected yet (slice 6).
+/// through this table, and the car through its composite `deviceRule`; water heaters and media keep their face
+/// rules there, and vacuums are not detected yet (slice 6). Each entry's `route` is the routing table (slice 5).
 enum KhalaDescriptors {
     static let generic = KhalaDescriptor(
         kind: .generic, accent: .neutral, match: KhalaMatch(domains: []), deviceRule: nil, primary: .none,
@@ -17,11 +17,11 @@ enum KhalaDescriptors {
         KhalaDescriptor(
             kind: .car, accent: .car, match: KhalaMatch(domains: ["device_tracker"]),
             deviceRule: .composite(all: ["device_tracker"], any: ["lock", "climate"]), primary: .none,
-            priority: 100, fallbackSymbol: "car"
+            priority: 100, fallbackSymbol: "car", route: .car
         ),
         KhalaDescriptor(
             kind: .waterHeater, accent: .heat, match: KhalaMatch(domains: ["water_heater"]), deviceRule: .face,
-            primary: .toggle, priority: 90, fallbackSymbol: "drop"
+            primary: .toggle, priority: 90, fallbackSymbol: "drop", route: .water
         ),
         KhalaDescriptor(
             kind: .climate, accent: .heat, match: KhalaMatch(domains: ["climate"]), deviceRule: .face,
@@ -29,7 +29,7 @@ enum KhalaDescriptors {
         ),
         KhalaDescriptor(
             kind: .media, accent: .media, match: KhalaMatch(domains: ["media_player"]), deviceRule: .face,
-            primary: .toggle, priority: 70, fallbackSymbol: "tv"
+            primary: .toggle, priority: 70, fallbackSymbol: "tv", route: .mediaSheet
         ),
         KhalaDescriptor(
             kind: .vacuum, accent: .neutral, match: KhalaMatch(domains: ["vacuum"]), deviceRule: .face,
@@ -37,7 +37,7 @@ enum KhalaDescriptors {
         ),
         KhalaDescriptor(
             kind: .lock, accent: .security, match: KhalaMatch(domains: ["lock"]), deviceRule: .face,
-            primary: .lock, priority: 55, fallbackSymbol: "lock", template: .lock
+            primary: .lock, priority: 55, fallbackSymbol: "lock", template: .lock, route: .camera
         ),
         KhalaDescriptor(
             kind: .cover, accent: .neutral, match: KhalaMatch(domains: ["cover"]), deviceRule: .face,
@@ -61,7 +61,7 @@ enum KhalaDescriptors {
         ),
         KhalaDescriptor(
             kind: .camera, accent: .security, match: KhalaMatch(domains: ["camera"]), deviceRule: nil,
-            primary: .none, priority: 0, fallbackSymbol: "video"
+            primary: .none, priority: 0, fallbackSymbol: "video", route: .camera
         ),
         generic,
     ]

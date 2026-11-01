@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "about": "Integration hints for Khala (KhalaHint.swift). Keyed on registry platform, domain and translation_key only; never on entity names or ids. No home data.",
+  "hints": [
+    { "platform": "tesla_fleet", "domain": "sensor", "translation_key": "charge_state_battery_level", "role": "battery" },
+    { "platform": "tesla_fleet", "domain": "sensor", "translation_key": "charge_state_battery_range", "role": "range" },
+    { "platform": "tesla_fleet", "domain": "sensor", "translation_key": "charge_state_charging_state", "role": "charging_state" },
+    { "platform": "tesla_fleet", "domain": "sensor", "translation_key": "charge_state_charger_power", "role": "charger_power" },
+    { "platform": "tesla_fleet", "domain": "sensor", "translation_key": "charge_state_minutes_to_full_charge", "role": "time_to_full" },
+    { "platform": "tesla_fleet", "domain": "sensor", "translation_key": "climate_state_inside_temp", "role": "inside_temperature" },
+    { "platform": "tesla_fleet", "domain": "sensor", "translation_key": "climate_state_outside_temp", "role": "outside_temperature" },
+    { "platform": "tesla_fleet", "domain": "number", "translation_key": "charge_state_charge_limit_soc", "role": "charge_limit" },
+    { "platform": "tesla_fleet", "domain": "number", "translation_key": "charge_state_charge_current_request", "role": "charge_current" },
+    { "platform": "tesla_fleet", "domain": "device_tracker", "translation_key": "location", "role": "location" },
+    { "platform": "tesla_fleet", "domain": "button", "translation_key": "wake", "role": "wake" },
+    { "platform": "tesla_fleet", "domain": "binary_sensor", "translation_key": "state", "role": "connectivity" },
+
+    { "platform": "tesla_fleet", "domain": "button", "translation_key": "flash_lights", "glyph": "lights" },
+    { "platform": "tesla_fleet", "domain": "button", "translation_key": "honk", "glyph": "horn" },
+    { "platform": "tesla_fleet", "domain": "switch", "translation_key": "vehicle_state_sentry_mode", "glyph": "shield" },
+    { "platform": "tesla_fleet", "domain": "cover", "translation_key": "charge_state_charge_port_door_open", "glyph": "chargePort", "section": ["overview", "charging"] },
+    { "platform": "tesla_fleet", "domain": "cover", "translation_key": "vehicle_state_ft", "glyph": "frunk" },
+    { "platform": "tesla_fleet", "domain": "cover", "translation_key": "vehicle_state_rt", "glyph": "trunk" },
+
+    { "platform": "tesla_fleet", "domain": "lock", "translation_key": "charge_state_charge_port_latch", "section": "charging" },
+    { "platform": "tesla_fleet", "domain": "switch", "translation_key": "charge_state_charging_state", "section": "charging" },
+
+    { "platform": "tesla_fleet", "domain": "switch", "translation_key": "climate_state_auto_seat_climate_left", "glyph": "seat", "section": "climate" },
+    { "platform": "tesla_fleet", "domain": "switch", "translation_key": "climate_state_auto_seat_climate_right", "glyph": "seat", "section": "climate" },
+    { "platform": "tesla_fleet", "domain": "switch", "translation_key": "climate_state_auto_steering_wheel_heat", "glyph": "wheel", "section": "climate" },
+    { "platform": "tesla_fleet", "domain": "switch", "translation_key": "climate_state_defrost_mode", "glyph": "defrost", "section": "climate" },
+    { "platform": "tesla_fleet", "domain": "select", "translation_key": "climate_state_seat_heater_left", "glyph": "seat", "section": "climate" },
+    { "platform": "tesla_fleet", "domain": "select", "translation_key": "climate_state_seat_heater_right", "glyph": "seat", "section": "climate" },
+    { "platform": "tesla_fleet", "domain": "select", "translation_key": "climate_state_seat_heater_rear_left", "glyph": "seat", "section": "climate" },
+    { "platform": "tesla_fleet", "domain": "select", "translation_key": "climate_state_seat_heater_rear_center", "glyph": "seat", "section": "climate" },
+    { "platform": "tesla_fleet", "domain": "select", "translation_key": "climate_state_seat_heater_rear_right", "glyph": "seat", "section": "climate" },
+    { "platform": "tesla_fleet", "domain": "select", "translation_key": "climate_state_seat_heater_third_row_left", "glyph": "seat", "section": "climate" },
+    { "platform": "tesla_fleet", "domain": "select", "translation_key": "climate_state_seat_heater_third_row_right", "glyph": "seat", "section": "climate" },
+    { "platform": "tesla_fleet", "domain": "select", "translation_key": "climate_state_steering_wheel_heat_level", "glyph": "wheel", "section": "climate" },
+
+    { "platform": "switcher_kis", "domain": "switch", "timedOn": { "service": "turn_on_with_timer", "field": "timer_minutes", "unit": "min" } },
+    { "platform": "switcher_kis", "domain": "sensor", "translation_key": "remaining_time", "role": "remaining" }
+  ]
+}

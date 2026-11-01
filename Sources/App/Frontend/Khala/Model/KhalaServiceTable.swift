@@ -83,7 +83,8 @@ enum KhalaServiceTable {
         case let .command(command):
             return self.command(command, domain: domain, entityId: entityId, make: { make($0) })
         case .timedOn:
-            // A hint's `{service, field}` decides it (slice 5); the boiler screen still sends its own.
+            // The hint's `{service, field}` decides it: the water screen sends `KhalaHeatLayout.heatCall`, built
+            // from the hints file. No control produces this intent.
             return nil
         case .confirmed:
             // Only `KhalaConfirmGate` unwraps a confirmed intent, after checking it.

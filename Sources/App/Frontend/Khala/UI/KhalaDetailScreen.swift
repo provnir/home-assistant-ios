@@ -2,8 +2,8 @@ import Shared
 import SwiftUI
 
 /// The native screen for a destination that isn't one of the menu's own (`KhalaDestination.camera/.device/.entity`):
-/// picks the designed screen for the device's role — car, hot water — or the template screen (`KhalaTemplateScreen`:
-/// lights, fans, climate, covers, locks, switches and everything else).
+/// picks the designed screen for the device's kind from the routing table (`KhalaScreenRoute`) — car, hot water — or
+/// the template screen (`KhalaTemplateScreen`: lights, fans, climate, covers, locks, switches and everything else).
 struct KhalaDetailScreen: View {
     let destination: KhalaDestination
     let server: Server
@@ -32,7 +32,10 @@ struct KhalaDetailScreen: View {
             .id(entityId)
         case let .device(id):
             if let device = home.devices.first(where: { $0.id == id }) {
-                switch device.category {
+                // The routing table (`KhalaScreenRoute`): the device's kind picks the screen. A climate pinned with
+                // the heat role is a water heater kind, so it keeps the water screen as in 41.1; a detected one is a
+                // climate and gets the climate template.
+                switch device.kind.descriptor.route {
                 case .car:
                     KhalaCarView(
                         device: device,
@@ -42,12 +45,7 @@ struct KhalaDetailScreen: View {
                         calendar: home.calendar,
                         onMedia: { entityId in shell.route(.mediaSheet(deviceId: device.id, entityId: entityId)) }
                     )
-                case .heat where device.kind == .climate:
-                    // A detected air conditioner or heater: the climate template (slice 4). Pins keep their role's
-                    // screen, as in 41.1.
-                    template(device.name, category: device.category, primary: device.primaryEntityId,
-                             members: device.memberEntityIds, actions: actions)
-                case .heat:
+                case .water:
                     KhalaWaterView(
                         device: device,
                         live: live,
@@ -55,7 +53,7 @@ struct KhalaDetailScreen: View {
                         now: home.now,
                         calendar: home.calendar
                     )
-                case .media, .security, .sun, .neutral:
+                case .template, .mediaSheet, .camera:
                     template(device.name, category: device.category, primary: device.primaryEntityId,
                              members: device.memberEntityIds, actions: actions)
                 }

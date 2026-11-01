@@ -16,4 +16,6 @@ struct KhalaDescriptor: Equatable {
     let fallbackSymbol: String
     /// The screen `KhalaTemplateScreen` draws for this kind (slice 3: lights and fans; the rest generic).
     var template: KhalaTemplateSpec = .generic
+    /// Where a device of this kind opens: the routing table (`KhalaScreenRoute`).
+    var route: KhalaScreenRoute = .template
 }

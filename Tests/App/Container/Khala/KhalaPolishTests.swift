@@ -225,7 +225,8 @@ struct KhalaCarWakePlanTests {
 
     private static func status(_ state: String) -> KhalaEntity {
         KhalaScreenFixtures.entity("binary_sensor.rover_status", state, ["device_class": "connectivity"],
-                                   device: "rover", deviceName: "Rover")
+                                   device: "rover", deviceName: "Rover", platform: "tesla_fleet",
+                                   translationKey: "state")
     }
 
     @Test func aRefreshWakesAnAsleepOrOfflineCarAndWaits() {

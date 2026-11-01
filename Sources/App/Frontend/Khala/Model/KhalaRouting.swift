@@ -2,21 +2,23 @@ import Foundation
 
 /// Decides which native screen a tap opens, from Home Assistant data only:
 /// - a camera, or an event entity on a camera's device → that camera's screen;
-/// - a listed device (or any of its entities) → its screen; media devices open the media sheet instead;
+/// - a listed device (or any of its entities) → where its kind routes (`KhalaScreenRoute`): its screen, the media
+///   sheet, or its camera;
 /// - an automation → the screen of the device it acts on, else Automations;
 /// - anything else → the generic entity screen.
 enum KhalaRouting {
+    /// The routing table: the device's kind's `route` (`KhalaDescriptors`).
     static func target(for device: KhalaDevice, cameras: [KhalaEntity]) -> KhalaRouteTarget {
-        switch device.category {
-        case .media:
+        switch device.kind.descriptor.route {
+        case .mediaSheet:
             return .mediaSheet(deviceId: device.id, entityId: device.primaryEntityId)
-        case .security:
+        case .camera:
             // A pinned camera-side entity: its camera if the device has one.
             if let camera = cameras.first(where: { device.memberEntityIds.contains($0.entityId) }) {
                 return .screen(.camera(entityId: camera.entityId))
             }
             return .screen(.device(id: device.id))
-        case .car, .heat, .neutral, .sun:
+        case .car, .water, .template:
             return .screen(.device(id: device.id))
         }
     }

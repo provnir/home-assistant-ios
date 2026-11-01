@@ -52,6 +52,9 @@ final class KhalaHomeViewModel: ObservableObject {
         self.assignmentStore = assignmentStore
         self.assignments = assignmentStore.load(serverId: server.identifier.rawValue)
         self.now = Current.date()
+        if KhalaHints.builtIn.entries.isEmpty {
+            Current.Log.error("Khala: \(KhalaHints.resourceName).json is missing or unreadable; cars and water heaters fall back to generic screens")
+        }
     }
 
     deinit {
@@ -132,6 +135,7 @@ final class KhalaHomeViewModel: ObservableObject {
                 deviceId: facts?.deviceId,
                 deviceName: facts?.deviceName,
                 isAuxiliary: facts?.isAuxiliary ?? false,
+                platform: facts?.platform,
                 translationKey: facts?.translationKey,
                 areaId: facts?.areaId,
                 labels: facts?.labels ?? []

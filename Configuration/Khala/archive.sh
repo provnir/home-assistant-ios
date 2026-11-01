@@ -88,6 +88,17 @@ xcodebuild archive -project HomeAssistant.xcodeproj -scheme App-Release -configu
     -skipPackagePluginValidation -skipMacroValidation ${auth[@]+"${auth[@]}"} \
     | xcbeautify --renderer github-actions
 
+# Khala's own resources must land in the app bundle (the synced Frontend folder copies them flat into the .app).
+shopt -s nullglob
+archived=("$ARCHIVE/Products/Applications/"*.app)
+[[ ${#archived[@]} == 1 ]] || { echo '::error::expected exactly one archived app'; exit 1; }
+for resource in khala-hints.json; do
+    [[ -s "${archived[0]}/$resource" ]] || { echo "::error::$resource is missing from the archived app bundle"; exit 1; }
+    python3 -c 'import json, sys; json.load(open(sys.argv[1]))' "${archived[0]}/$resource"
+    echo "- Bundle check: $resource is in $(basename "${archived[0]}") ($(wc -c < "${archived[0]}/$resource" | tr -d ' ') bytes, valid JSON)." >> "$GITHUB_STEP_SUMMARY"
+done
+shopt -u nullglob
+
 if [[ "$SIGNING" == unsigned ]]; then
     echo "- Unsigned compile-only archive succeeded (nothing exported or kept)." >> "$GITHUB_STEP_SUMMARY"
     exit 0

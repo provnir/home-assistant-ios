@@ -3,13 +3,16 @@ import Foundation
 /// A car's screens (mockup `DayCar`) read from the entities of its Home Assistant device — whatever the
 /// integration exposes, nothing assumed: tiles exist only for entities that exist.
 ///
-/// Sorting, by domain, device class and the words integrations use in entity ids/names (types are code, which
-/// car is which is data):
-/// - **Overview:** battery %, range, charging state, the charge-limit tick; a controls grid of the main lock,
-///   other switches (sentry...), covers (charge port, frunk, trunk, windows) and buttons (flash lights, horn...).
-/// - **Climate:** the `climate` entity (target ±, on/off), cabin temperatures, seat/steering/defrost controls.
-/// - **Charging:** charge limit, charge current, charging switch, cable lock, charger power, time to full.
-/// - The wake button and connectivity sensor become the "Asleep · wake" pill.
+/// What each entity is comes from the hints file (`KhalaHints`, keyed on registry platform + translation key), then
+/// from domain and device class. Names and ids are never read. Types are code; which car is which is data.
+/// - **Overview:** battery %, range, charging state, the charge-limit tick; a controls grid of the main lock, the
+///   other switches, covers and buttons with a glyph (a hint's, or the domain's). Buttons with no glyph of their
+///   own go under one "More" tile.
+/// - **Climate:** the `climate` entity (target ±, on/off), cabin temperatures, the controls hinted `climate`.
+/// - **Charging:** charge limit, charge current, charger power, time to full, the controls hinted `charging`.
+/// - The hinted wake button and connectivity sensor become the "Asleep · wake" pill.
+/// A car with no hints (another integration) still gets Overview — every control, the battery by device class —
+/// and the Climate and Charging tabs only when something lands on them (`tabs`).
 struct KhalaCarLayout: Equatable {
     struct Climate: Equatable {
         let entityId: String
@@ -18,6 +21,11 @@ struct KhalaCarLayout: Equatable {
         let currentTemperature: Double?
         /// The mode `turn_on` would pick back (the first non-off mode), for the on/off button.
         let onMode: String?
+    }
+
+    /// The screen's bottom-bar sections, in order.
+    enum Tab: Equatable {
+        case overview, climate, charging
     }
 
     var name: String
@@ -50,49 +58,51 @@ struct KhalaCarLayout: Equatable {
     var timeToFull: Date?
 
     /// `members` are the device's entities, `attributes` the raw attributes by entity id.
-    init(name: String, members: [KhalaEntity], attributes: [String: [String: Any]]) {
+    init(
+        name: String,
+        members: [KhalaEntity],
+        attributes: [String: [String: Any]],
+        hints: KhalaHints = .builtIn
+    ) {
         self.name = name
         let visible = members.filter { !$0.isAuxiliary }.sorted { $0.entityId < $1.entityId }
         func attrs(_ entity: KhalaEntity) -> [String: Any] { attributes[entity.entityId] ?? [:] }
-        func text(_ entity: KhalaEntity) -> String { (entity.entityId + " " + entity.name).lowercased() }
-        func has(_ entity: KhalaEntity, _ words: String...) -> Bool { words.contains { text(entity).contains($0) } }
+        func hint(_ entity: KhalaEntity) -> KhalaHint? { hints.hint(for: entity) }
+        /// The member the hints give `role`, on `domain`.
+        func member(_ role: KhalaHintRole, _ domain: String) -> KhalaEntity? {
+            visible.first { $0.domain == domain && hint($0)?.role == role }
+        }
+        /// A member known only by domain and device class, when no hint names one: it must carry no role of its
+        /// own (a hinted usable-battery sensor is not THE battery).
+        func plain(_ domain: String, deviceClass: String) -> KhalaEntity? {
+            visible.first { $0.domain == domain && $0.deviceClass == deviceClass && hint($0)?.role == nil }
+        }
 
         // Battery, range, charging.
-        if let battery = visible.first(where: {
-            $0.domain == "sensor" && $0.deviceClass == "battery" && !has($0, "limit")
-        }) {
+        if let battery = member(.battery, "sensor") ?? plain("sensor", deviceClass: "battery") {
             self.battery = Double(battery.state)
             self.batteryEntityId = battery.entityId
         }
-        if let range = visible.first(where: { $0.domain == "sensor" && $0.deviceClass == "distance" && has($0, "range") }),
-           let value = Double(range.state) {
+        if let range = member(.range, "sensor"), let value = Double(range.state) {
             self.rangeText = "≈ " + KhalaText.measurement(value.rounded(), unit: range.unit)
         }
-        if let charging = visible.first(where: { $0.domain == "sensor" && has($0, "charging") && Double($0.state) == nil }) {
+        if let charging = member(.chargingState, "sensor"), Double(charging.state) == nil {
             self.isCharging = charging.state == "charging" || charging.state == "starting"
             self.chargingText = KhalaScreenText.chargingState(charging.state)
         }
-        self.chargeLimit = visible
-            .first { $0.domain == "number" && ($0.deviceClass == "battery" || has($0, "charge_limit", "charge limit")) }
+        self.chargeLimit = (member(.chargeLimit, "number") ?? plain("number", deviceClass: "battery"))
             .flatMap { KhalaNumberSetting($0, attributes: attrs($0)) }
-        self.chargeCurrent = visible
-            .first { $0.domain == "number" && $0.deviceClass == "current" && has($0, "charg") }
+        self.chargeCurrent = (member(.chargeCurrent, "number") ?? plain("number", deviceClass: "current"))
             .flatMap { KhalaNumberSetting($0, attributes: attrs($0)) }
-        if let power = visible.first(where: { $0.domain == "sensor" && $0.deviceClass == "power" && has($0, "charg") }),
-           let value = Double(power.state) {
+        if let power = member(.chargerPower, "sensor"), let value = Double(power.state) {
             self.chargerPowerText = KhalaText.measurement(value, unit: power.unit)
         }
-        self.timeToFull = visible
-            .first { $0.domain == "sensor" && $0.deviceClass == "timestamp" && has($0, "full", "charge") }?
-            .stateDate
+        self.timeToFull = member(.timeToFull, "sensor")?.stateDate
 
         // Presence and sleep.
-        self.tracker = visible.first { $0.domain == "device_tracker" && has($0, "location") }
-            ?? visible.first { $0.domain == "device_tracker" }
-        self.wakeButtonId = visible.first { $0.domain == "button" && has($0, "wake") }?.entityId
-        if let status = visible.first(where: {
-            $0.domain == "binary_sensor" && $0.deviceClass == "connectivity" && !has($0, "cable", "charg")
-        }) {
+        self.tracker = member(.location, "device_tracker") ?? visible.first { $0.domain == "device_tracker" }
+        self.wakeButtonId = member(.wake, "button")?.entityId
+        if let status = member(.connectivity, "binary_sensor") {
             self.connectivityId = status.entityId
             if !status.isUnavailable { self.isAwake = status.state == "on" }
         }
@@ -121,47 +131,44 @@ struct KhalaCarLayout: Equatable {
                 onMode: modes.first { $0 != "off" }
             )
         }
-        for sensor in visible where sensor.domain == "sensor" && sensor.deviceClass == "temperature" {
-            if has(sensor, "inside", "cabin", "interior") {
-                insideTemperature = Double(sensor.state)
-            } else if has(sensor, "outside", "exterior", "ambient") {
-                outsideTemperature = Double(sensor.state)
-            }
-        }
+        insideTemperature = member(.insideTemperature, "sensor").flatMap { Double($0.state) }
+        outsideTemperature = member(.outsideTemperature, "sensor").flatMap { Double($0.state) }
 
-        // Controls, by tab.
-        let mainLock = visible.first { $0.domain == "lock" && !has($0, "cable", "charg") }
-        var overview: [KhalaControl] = []
-        var more: [KhalaControl] = []
-        var climateControls: [KhalaControl] = []
-        var chargingControls: [KhalaControl] = []
+        // Controls, by tab: where the hint puts them, else Overview (glyph-less buttons: More). The main lock is the
+        // first lock the hints don't send elsewhere (a charge cable lock goes to Charging).
+        var tabs: [KhalaCarSection: [KhalaControl]] = [:]
         for entity in visible {
             guard ["lock", "switch", "cover", "button", "select"].contains(entity.domain),
                   entity.entityId != wakeButtonId,
-                  let control = KhalaControl.make(entity, attributes: attrs(entity)) else { continue }
-            if entity.domain == "lock", entity.entityId != mainLock?.entityId {
-                chargingControls.append(control)
-            } else if has(entity, "seat", "steering", "defrost", "climate", "heater", "cabin", "fan") {
-                climateControls.append(control)
-            } else if control.glyph == .chargePort {
-                // Shown on both: it is the car's most used opening.
-                overview.append(control)
-                chargingControls.append(control)
-            } else if entity.domain == "switch", has(entity, "charg") {
-                chargingControls.append(control)
-            } else if entity.domain == "select" {
-                climateControls.append(control)
+                  let control = KhalaControl.make(entity, attributes: attrs(entity), hints: hints) else { continue }
+            let sections = hint(entity)?.sections ?? []
+            if !sections.isEmpty {
+                for section in sections {
+                    tabs[section, default: []].append(control)
+                }
             } else if entity.domain == "button", control.glyph == .button {
-                more.append(control)
+                tabs[.more, default: []].append(control)
             } else {
-                overview.append(control)
+                tabs[.overview, default: []].append(control)
             }
         }
-        self.overview = overview.sorted(by: Self.tileOrder)
-        self.moreControls = more.sorted(by: Self.tileOrder)
+        self.overview = (tabs[.overview] ?? []).sorted(by: Self.tileOrder)
+        self.moreControls = (tabs[.more] ?? []).sorted(by: Self.tileOrder)
         self.mediaPlayerId = visible.first { $0.domain == "media_player" }?.entityId
-        self.climateControls = climateControls.sorted(by: Self.tileOrder)
-        self.chargingControls = chargingControls.sorted(by: Self.tileOrder)
+        self.climateControls = (tabs[.climate] ?? []).sorted(by: Self.tileOrder)
+        self.chargingControls = (tabs[.charging] ?? []).sorted(by: Self.tileOrder)
+    }
+
+    /// Overview always; Climate and Charging only when something lands on them, so a car the hints don't know
+    /// shows plain tabs instead of empty ones (one tab left: no bar). A known car has all three.
+    var tabs: [Tab] {
+        var tabs: [Tab] = [.overview]
+        if climate != nil || !climateControls.isEmpty { tabs.append(.climate) }
+        if chargeLimit != nil || chargeCurrent != nil || chargerPowerText != nil || timeToFull != nil
+            || chargingText != nil || !chargingControls.isEmpty {
+            tabs.append(.charging)
+        }
+        return tabs
     }
 
     /// How to get the car awake before reading it or sending it a command (Nir: a refresh must wake the car to

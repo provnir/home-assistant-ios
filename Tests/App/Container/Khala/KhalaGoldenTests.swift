@@ -354,6 +354,10 @@ struct KhalaGoldenTests {
 
     // MARK: - Glyphs and tiles
 
+    /// Re-recorded in slice 5 (no word matching left in Model): the last six rows and `automation.evening_lights`
+    /// are entities of no integration whose glyph 41.1 took from words in their ids ("guard", "window", "light",
+    /// "steering", "boot", "fan"); they now fall back to domain and device class. Every car, heater and media row is
+    /// unchanged, from the hints file.
     @Test func glyphsForEveryFixture() {
         let entities = Kinds.everything + Home.home + [
             Kinds.entity("switch.garage_guard", "on"),
@@ -442,17 +446,19 @@ struct KhalaGoldenTests {
         device_tracker.phone home -> generic
         sensor.phone_battery_level 65 -> generic
         automation.midnight_check on -> generic
-        automation.evening_lights off -> lights
+        automation.evening_lights off -> generic
         input_datetime.wake_up 06:30:00 -> generic
-        switch.garage_guard on -> shield
-        cover.living_window closed -> window
-        button.porch_light_flash unknown -> lights
-        switch.steering_wheel_heater off -> wheel
-        select.boot_mode off -> trunk
-        number.climate_fan_speed 3 -> fan
+        switch.garage_guard on -> power
+        cover.living_window closed -> generic
+        button.porch_light_flash unknown -> button
+        switch.steering_wheel_heater off -> power
+        select.boot_mode off -> generic
+        number.climate_fan_speed 3 -> generic
         """))
     }
 
+    /// Re-recorded in slice 5: only `button.reboot` changed ("trunk", from the word "boot" in "reboot", is now the
+    /// plain button glyph).
     @Test func tilesForEveryFixture() {
         let attributes = Kinds.everythingAttributes
         let extra: [(KhalaEntity, [String: Any])] = [
@@ -555,7 +561,7 @@ struct KhalaGoldenTests {
         cover.side_gate | Side gate | Open | generic | active | - | - | -
         cover.side_gate | Side gate | Closed | generic | idle | cover.open_cover(cover.side_gate) | - | confirm
         switch.desk_plug | Desk plug | Unavailable | power | idle | - | - | -
-        button.reboot | button.reboot |  | trunk | idle | - | - | -
+        button.reboot | button.reboot |  | button | idle | - | - | -
         input_boolean.guest_mode | input_boolean.guest_mode | On | generic | active | input_boolean.turn_off(input_boolean.guest_mode) | - | -
         input_select.scene_mode | input_select.scene_mode | Evening | generic | active | - | day/evening | -
         select.preset | select.preset | Unavailable | generic | idle | - | - | -

@@ -25,6 +25,9 @@ trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/Sources/KhalaModel" "$WORK/Sources/KhalaDump" "$WORK/Tests/KhalaModelTests" \
   "$WORK/Sources/Shared" "$WORK/Sources/HAKit"
 cp "$MODEL"/*.swift "$WORK/Sources/KhalaModel/"
+# Model's resources (the hints file) ship in the app bundle; here they are the package's (`Bundle.module`).
+mkdir -p "$WORK/Sources/KhalaModel/Resources"
+cp "$MODEL"/Resources/* "$WORK/Sources/KhalaModel/Resources/"
 DOMAIN="$ROOT/Sources/Shared/Domain"
 for file in LightCapabilities CoverCapabilities FanCapabilities LockCapabilities VacuumCapabilities Service \
   Climate/ClimateEntityFeature; do
@@ -45,7 +48,8 @@ let package = Package(
     targets: [
         .target(name: "HAKit", swiftSettings: [.swiftLanguageMode(.v5)]),
         .target(name: "Shared", dependencies: ["HAKit"], swiftSettings: [.swiftLanguageMode(.v5)]),
-        .target(name: "KhalaModel", dependencies: ["Shared"], swiftSettings: [.swiftLanguageMode(.v5)]),
+        .target(name: "KhalaModel", dependencies: ["Shared"], resources: [.copy("Resources/khala-hints.json")],
+                swiftSettings: [.swiftLanguageMode(.v5)]),
         .executableTarget(name: "KhalaDump", dependencies: ["KhalaModel"], swiftSettings: [.swiftLanguageMode(.v5)]),
         .testTarget(name: "KhalaModelTests", dependencies: ["KhalaModel", "Shared"], swiftSettings: [.swiftLanguageMode(.v5)]),
     ]

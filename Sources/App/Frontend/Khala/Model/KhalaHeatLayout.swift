@@ -1,9 +1,10 @@
 import Foundation
 
-/// The hot-water screen (mockup `DayWater`) for a device with the heat role: a `water_heater`, or a plain switch the
-/// user pinned as hot water. Reads the heater's state, a remaining-time sensor when the device has one, and decides
-/// the "Heat now" action:
-/// - a Switcher (`switcher_kis` platform) gets `switcher_kis.turn_on_with_timer` with the chosen minutes;
+/// The hot-water screen (mockup `DayWater`) for a water-heater device: a `water_heater`, or a plain switch the user
+/// pinned as hot water. Reads the heater's state, the remaining-time sensor the hints name (`KhalaHintRole.remaining`)
+/// when the device has one, and decides the "Heat now" action:
+/// - a heater whose integration has a `timedOn` hint (a boiler switch with its own timer service) gets that service
+///   with the chosen minutes — the service, field and unit are data in the hints file, not code;
 /// - any other switch gets `switch.turn_on` (no timer; the duration control is hidden);
 /// - a `water_heater` gets `water_heater.turn_on`.
 struct KhalaHeatLayout: Equatable {
@@ -20,10 +21,12 @@ struct KhalaHeatLayout: Equatable {
     let remaining: TimeInterval?
     /// "2.4 kW" while drawing power.
     let powerText: String?
-    let supportsDuration: Bool
+    /// The hint's timer service, when the heater has one.
+    let timedOn: KhalaTimedOn?
+    var supportsDuration: Bool { timedOn != nil }
 
     /// `platform` is the heater entity's integration from the entity registry (nil when unknown).
-    init(heater: KhalaEntity, platform: String?, members: [KhalaEntity]) {
+    init(heater: KhalaEntity, platform: String?, members: [KhalaEntity], hints: KhalaHints = .builtIn) {
         heaterEntityId = heater.entityId
         isUnavailable = heater.isUnavailable
         isOn = !["off", "unavailable", "unknown"].contains(heater.state)
@@ -32,13 +35,12 @@ struct KhalaHeatLayout: Equatable {
         } else {
             stateText = KhalaText.humanized(state: heater.state)
         }
-        supportsDuration = platform == "switcher_kis" && heater.domain == "switch"
-
-        func text(_ entity: KhalaEntity) -> String { (entity.entityId + " " + entity.name).lowercased() }
-        let sensors = members.filter { $0.domain == "sensor" && !$0.isUnavailable }
-        let remainingSensor = sensors.first { sensor in
-            ["remaining", "time_left", "time left"].contains { text(sensor).contains($0) }
+        timedOn = platform.flatMap {
+            hints.hint(platform: $0, domain: heater.domain, translationKey: heater.translationKey)?.timedOn
         }
+
+        let sensors = members.filter { $0.domain == "sensor" && !$0.isUnavailable }
+        let remainingSensor = sensors.first { hints.hint(for: $0)?.role == .remaining }
         remaining = remainingSensor.flatMap { Self.seconds($0.state, unit: $0.unit) }
         if let power = sensors.first(where: { $0.deviceClass == "power" }), let watts = Double(power.state), watts > 0 {
             powerText = KhalaText.measurement(power.unit == "W" && watts >= 1000 ? watts / 1000 : watts,
@@ -49,9 +51,9 @@ struct KhalaHeatLayout: Equatable {
     }
 
     func heatCall(minutes: Int) -> KhalaServiceCall {
-        if supportsDuration {
-            return KhalaServiceCall("switcher_kis", "turn_on_with_timer", entityId: heaterEntityId,
-                                    data: ["timer_minutes": minutes])
+        if let timedOn {
+            return KhalaServiceCall(timedOn.domain, timedOn.service, entityId: heaterEntityId,
+                                    data: [timedOn.field: timedOn.value(minutes: minutes)])
         }
         return KhalaServiceCall.power(heaterEntityId, on: true)
     }

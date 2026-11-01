@@ -21,6 +21,9 @@ struct KhalaEntity: Equatable {
     let deviceName: String?
     /// Config/diagnostic or hidden in the entity registry: never a device's face or a timeline item.
     let isAuxiliary: Bool
+    /// The registry's `platform`: the integration that made the entity (its domain name, e.g. `hue`). With
+    /// `translationKey` it is what `KhalaHints` are keyed on.
+    let platform: String?
     /// The registry's `translation_key`: which of its integration's entities this is, language-free.
     let translationKey: String?
     /// The entity's area: its own registry area, else its device's.
@@ -51,6 +54,7 @@ struct KhalaEntity: Equatable {
         deviceId: String? = nil,
         deviceName: String? = nil,
         isAuxiliary: Bool = false,
+        platform: String? = nil,
         translationKey: String? = nil,
         areaId: String? = nil,
         labels: [String] = []
@@ -67,6 +71,7 @@ struct KhalaEntity: Equatable {
         self.deviceId = deviceId
         self.deviceName = deviceName
         self.isAuxiliary = isAuxiliary
+        self.platform = platform
         self.translationKey = translationKey
         self.areaId = areaId
         self.labels = labels

@@ -3,9 +3,10 @@ import Shared
 import SwiftUI
 import UIKit
 
-/// A car's screen (mockup `DayCar`), built from whatever its Home Assistant device exposes (`KhalaCarLayout`):
-/// Overview (top-down car, battery with the charge-limit tick, controls grid, recent arrivals/departures),
-/// Climate (target ±, start/stop, seat/steering/defrost) and Charging (limit, current, port, cable, power).
+/// A car's screen (mockup `DayCar`), built from whatever its Home Assistant device exposes (`KhalaCarLayout`, read
+/// through the hints file): Overview (top-down car, battery with the charge-limit tick, controls grid, recent
+/// arrivals/departures), Climate (target ±, start/stop, seat/steering/defrost) and Charging (limit, current, port,
+/// cable, power). A car the hints don't know gets only the tabs that have something on them.
 struct KhalaCarView: View {
     let device: KhalaDevice
     @ObservedObject var live: KhalaLiveStates
@@ -21,11 +22,14 @@ struct KhalaCarView: View {
     /// Waking the car / asking for fresh data, shown on the trailing pill.
     @State private var sync: KhalaCarSyncState = .idle
 
-    private static let tabs = [
-        KhalaSubTab(title: KhalaScreenText.overview, symbol: .car),
-        KhalaSubTab(title: KhalaScreenText.climate, symbol: .fanblades),
-        KhalaSubTab(title: KhalaScreenText.charging, symbol: .boltFill),
-    ]
+    /// The bar item of each of the layout's tabs (a car the hints know has all three).
+    private static func subTab(_ tab: KhalaCarLayout.Tab) -> KhalaSubTab {
+        switch tab {
+        case .overview: return KhalaSubTab(title: KhalaScreenText.overview, symbol: .car)
+        case .climate: return KhalaSubTab(title: KhalaScreenText.climate, symbol: .fanblades)
+        case .charging: return KhalaSubTab(title: KhalaScreenText.charging, symbol: .boltFill)
+        }
+    }
 
     private var layout: KhalaCarLayout {
         KhalaCarLayout(name: device.name, members: live.members(of: device), attributes: live.attributes)
@@ -33,20 +37,21 @@ struct KhalaCarView: View {
 
     var body: some View {
         let car = layout
+        let tabs = car.tabs
         // The "Updated 4 min ago" line ages on its own, between state changes.
         TimelineView(.periodic(from: .now, by: 30)) { context in
             KhalaDeviceScreen(
                 subtitle: subtitle(car, now: context.date),
-                tabs: Self.tabs,
+                tabs: tabs.map(Self.subTab),
                 selection: $tab,
                 category: .car,
                 title: { KhalaLargeTitle(text: device.name) },
                 trailing: { syncPill(car) },
                 content: {
-                    switch tab {
-                    case 1: climate(car)
-                    case 2: charging(car)
-                    default: overview(car)
+                    switch tabs.indices.contains(tab) ? tabs[tab] : .overview {
+                    case .climate: climate(car)
+                    case .charging: charging(car)
+                    case .overview: overview(car)
                     }
                 },
                 onRefresh: { await refresh(explicit: true) }
