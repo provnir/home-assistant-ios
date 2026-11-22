@@ -4,7 +4,7 @@ import SharedTesting
 import SwiftUI
 import Testing
 
-@Suite(.serialized)
+@Suite(.sharedState)
 @MainActor
 struct NativeTabBarSnapshotTests {
     @available(iOS 26, *)
@@ -21,6 +21,41 @@ struct NativeTabBarSnapshotTests {
         let viewModel = NativeTabBarViewModel.preview(
             additionalServers: [ServerFixture.withRemoteConnection],
             suiteName: "NativeTabBarSnapshotTests.moreServers"
+        )
+        assertLightDarkSnapshots(
+            of: NavigationStack { NativeTabBarMoreView(viewModel: viewModel) },
+            drawHierarchyInKeyWindow: true
+        )
+    }
+
+    @available(iOS 26, *)
+    @Test func moreViewInTheVerticalBar() {
+        let viewModel = NativeTabBarViewModel.preview(
+            additionalServers: [ServerFixture.withRemoteConnection],
+            suiteName: "NativeTabBarSnapshotTests.moreVerticalBar"
+        )
+        assertLightDarkSnapshots(
+            of: NavigationStack { NativeTabBarMoreView(viewModel: viewModel, usesVerticalBar: true) },
+            drawHierarchyInKeyWindow: true
+        )
+    }
+
+    @available(iOS 26, *)
+    @Test func moreViewInTheVerticalBarShowingTheFrontend() throws {
+        let viewModel = NativeTabBarViewModel.preview(suiteName: "NativeTabBarSnapshotTests.moreVerticalBarFrontend")
+        viewModel.didSelect(.more)
+        try viewModel.open(#require(viewModel.moreItems.first))
+        assertLightDarkSnapshots(
+            of: NavigationStack { NativeTabBarMoreView(viewModel: viewModel, usesVerticalBar: true) },
+            drawHierarchyInKeyWindow: true
+        )
+    }
+
+    @available(iOS 26, *)
+    @Test func moreViewForANonAdmin() {
+        let viewModel = NativeTabBarViewModel.preview(
+            isAdmin: false,
+            suiteName: "NativeTabBarSnapshotTests.moreNonAdmin"
         )
         assertLightDarkSnapshots(
             of: NavigationStack { NativeTabBarMoreView(viewModel: viewModel) },

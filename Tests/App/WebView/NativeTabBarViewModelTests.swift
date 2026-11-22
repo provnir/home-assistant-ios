@@ -1,9 +1,11 @@
 import Foundation
 @testable import HomeAssistant
 import Shared
+import SharedTesting
 import Testing
 
 @MainActor
+@Suite(.sharedState)
 struct NativeTabBarViewModelTests {
     private func panel(_ path: String, component: String = "lovelace", title: String) -> HAPanel {
         HAPanel(
@@ -443,15 +445,26 @@ struct NativeTabBarViewModelTests {
         #expect(presenter.zoomSourceID == NativeTabBarViewModel.appSettingsTransitionID)
     }
 
-    @Test("A pinned tab's gear opens the settings sheet without a zoom source")
-    func showAppSettingsFromATab() {
-        let sut = makeFixture("appSettingsTab").sut
+    @Test("The gear opens Home Assistant Settings when there is one, otherwise the app's settings")
+    func openSettings() {
+        let admin = makeFixture("gearAdmin").sut
+        var navigated: [String] = []
+        admin.sidebar.onNavigate = { navigated.append($0) }
         let presenter = AppSettingsPresenter()
 
-        sut.showAppSettings(using: presenter, zoomingFrom: nil)
+        admin.openSettings(using: presenter)
+        #expect(navigated == ["/config"])
+        #expect(!presenter.isSheetPresented)
+
+        let user = makeFixture("gearUser", isAdmin: false).sut
+        user.sidebar.onNavigate = { navigated.append($0) }
+        user.openSettings(using: nil)
+        #expect(navigated == ["/config"])
+
+        user.openSettings(using: presenter, zoomingFrom: "gear")
+        #expect(navigated == ["/config"])
         #expect(presenter.isSheetPresented)
-        #expect(presenter.mode == .full)
-        #expect(presenter.zoomSourceID == nil)
+        #expect(presenter.zoomSourceID == "gear")
     }
 
     @Test("Switching to another server goes through the app coordinator; the current one is left alone")
@@ -466,8 +479,11 @@ struct NativeTabBarViewModelTests {
         #expect(sut.otherServers.map(\.identifier) == [other.identifier])
         #expect(sut.servers.map(\.identifier) == [ServerFixture.standard.identifier, other.identifier])
 
+        // Handed to the view model rather than registered with the scene manager: the app-wide
+        // coordinator is whatever registered last, so other tests' work reaches it, and a callback this
+        // test leaves on it would resume a continuation the test has already finished with.
         let coordinator = MockAppCoordinator()
-        Current.sceneManager.registerAppCoordinator(coordinator)
+        sut.appCoordinator = { .value(coordinator) }
         sut.open(server: ServerFixture.standard)
         await withCheckedContinuation { continuation in
             coordinator.onOpenServer = { continuation.resume() }

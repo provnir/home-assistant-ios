@@ -274,7 +274,7 @@ struct CameraPlayerView: View {
     @MainActor
     private func loadCapabilities() async {
         let entityId = cameraEntityId
-        let capabilities = await CameraCapabilities.fetch(server: server, cameraEntityId: entityId)
+        let outcome = await CameraCapabilities.fetch(server: server, cameraEntityId: entityId)
         // Cancelling the task does not stop the request already in flight, so a switch of camera
         // mid-fetch still lands here; a stale answer must not decide the plan for the camera now
         // on screen.
@@ -282,9 +282,9 @@ struct CameraPlayerView: View {
         // Core only reports two-way audio for a camera it can stream over WebRTC with the Labs
         // preview switched on, so nothing else needs checking here. Catalyst has no microphone
         // stream, as the frontend is told through `hasCameraMicrophoneStream`.
-        supportsTwoWayAudio = (capabilities?.twoWayAudio ?? false) && !Current.isCatalyst
+        supportsTwoWayAudio = (outcome.capabilities?.twoWayAudio ?? false) && !Current.isCatalyst
         // Khala: the hidden Live engine setting and this app session's WebKit failures shape the plan and the page.
-        let players = CameraStreamPlan.players(for: capabilities)
+        let players = CameraStreamPlan.players(for: outcome)
         liveLanes = KhalaLiveEngineStore.lanes(players, cameraEntityId: entityId)
         playback.start(with: KhalaLiveEngineStore.plan(players, cameraEntityId: entityId))
     }

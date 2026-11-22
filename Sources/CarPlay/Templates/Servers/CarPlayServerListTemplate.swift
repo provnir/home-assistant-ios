@@ -18,6 +18,12 @@ final class CarPlayServersListTemplate: CarPlayTemplateProvider {
         }
     }
 
+    /// Set only by tests, which cannot construct a `CPInterfaceController`.
+    var navigatorOverride: CarPlayNavigationPresenting?
+    private var navigator: CarPlayNavigationPresenting? {
+        navigatorOverride ?? interfaceController
+    }
+
     init(viewModel: CarPlayServerListViewModel) {
         self.viewModel = viewModel
         self.template = CPListTemplate(title: L10n.CarPlay.Navigation.Tab.settings, sections: [])
@@ -73,12 +79,12 @@ final class CarPlayServersListTemplate: CarPlayTemplateProvider {
     }
 
     func showNoServerAlert() {
-        guard interfaceController?.presentedTemplate == nil else {
+        guard navigator?.presentedTemplate == nil else {
             return
         }
 
         let alertTemplate = CarPlayNoServerAlert()
-        alertTemplate.interfaceController = interfaceController
+        alertTemplate.interfaceController = navigator
         alertTemplate.present()
     }
 
@@ -142,7 +148,7 @@ final class CarPlayServersListTemplate: CarPlayTemplateProvider {
         )
         item.accessoryType = .disclosureIndicator
         item.handler = { [weak self] _, completion in
-            self?.assistSettingsTemplate.present(using: self?.interfaceController)
+            self?.assistSettingsTemplate.present(using: self?.navigator)
             completion()
         }
         return item
@@ -188,14 +194,15 @@ final class CarPlayServersListTemplate: CarPlayTemplateProvider {
     }
 
     private func presentServerSelection() {
-        viewModel.beginServerSelection()
         let selectionTemplate = CPListTemplate(title: L10n.CarPlay.Labels.Settings.MainServer.title, sections: [])
-        serverSelectionTemplate = selectionTemplate
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            await selectionTemplate.updateSections([serverSelectionSection(template: selectionTemplate)])
+        if navigator?.pushTemplateWithinDepthLimit(selectionTemplate, animated: true, completion: nil) != false {
+            viewModel.beginServerSelection()
+            serverSelectionTemplate = selectionTemplate
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                await selectionTemplate.updateSections([serverSelectionSection(template: selectionTemplate)])
+            }
         }
-        interfaceController?.pushTemplate(selectionTemplate, animated: true, completion: nil)
     }
 
     private func serverSelectionSection(template: CPListTemplate) async -> CPListSection {
@@ -215,11 +222,12 @@ final class CarPlayServersListTemplate: CarPlayTemplateProvider {
     }
 
     private func presentLayoutSelection() {
-        viewModel.beginLayoutSelection()
         let selectionTemplate = CPListTemplate(title: L10n.Carplay.Tab.QuickAccess.layout, sections: [])
-        layoutSelectionTemplate = selectionTemplate
-        selectionTemplate.updateSections([layoutSelectionSection(template: selectionTemplate)])
-        interfaceController?.pushTemplate(selectionTemplate, animated: true, completion: nil)
+        if navigator?.pushTemplateWithinDepthLimit(selectionTemplate, animated: true, completion: nil) != false {
+            viewModel.beginLayoutSelection()
+            layoutSelectionTemplate = selectionTemplate
+            selectionTemplate.updateSections([layoutSelectionSection(template: selectionTemplate)])
+        }
     }
 
     private func layoutSelectionSection(template: CPListTemplate) -> CPListSection {
@@ -247,11 +255,12 @@ final class CarPlayServersListTemplate: CarPlayTemplateProvider {
     }
 
     private func presentTabsSelection() {
-        viewModel.beginTabSelection()
         let selectionTemplate = CPListTemplate(title: L10n.CarPlay.Config.Tabs.title, sections: [])
-        tabsSelectionTemplate = selectionTemplate
-        selectionTemplate.updateSections([tabsSelectionSection(template: selectionTemplate)])
-        interfaceController?.pushTemplate(selectionTemplate, animated: true, completion: nil)
+        if navigator?.pushTemplateWithinDepthLimit(selectionTemplate, animated: true, completion: nil) != false {
+            viewModel.beginTabSelection()
+            tabsSelectionTemplate = selectionTemplate
+            selectionTemplate.updateSections([tabsSelectionSection(template: selectionTemplate)])
+        }
     }
 
     private func tabsSelectionSection(template: CPListTemplate) -> CPListSection {
@@ -294,7 +303,7 @@ final class CarPlayServersListTemplate: CarPlayTemplateProvider {
                 ]),
             ]
         )
-        interfaceController?.pushTemplate(troubleshootingTemplate, animated: true, completion: nil)
+        navigator?.pushTemplateWithinDepthLimit(troubleshootingTemplate, animated: true, completion: nil)
     }
 
     private var assistAudioItem: CPListItem {
@@ -319,7 +328,7 @@ final class CarPlayServersListTemplate: CarPlayTemplateProvider {
                 }),
             ]
         )
-        interfaceController?.pushTemplate(selectionTemplate, animated: true, completion: nil)
+        navigator?.pushTemplateWithinDepthLimit(selectionTemplate, animated: true, completion: nil)
     }
 
     private func ttsPlaybackStrategyItem(strategy: CarPlayAssistTTSPlaybackStrategy) -> CPListItem {
@@ -331,7 +340,7 @@ final class CarPlayServersListTemplate: CarPlayTemplateProvider {
         item.accessoryType = .none
         item.handler = { [weak self] _, completion in
             self?.viewModel.setTTSPlaybackStrategy(strategy)
-            self?.interfaceController?.popTemplate(animated: true, completion: nil)
+            self?.navigator?.popTemplate(animated: true, completion: nil)
             completion()
         }
         return item
@@ -343,7 +352,9 @@ final class CarPlayServersListTemplate: CarPlayTemplateProvider {
             detailText: nil
         )
         item.handler = { _, _ in
-            fatalError("Intentional crash, triggered from CarPlay Troubleshooting option to restart App.")
+            // A plain exit: the point is a restart, and trapping here filed a crash report per use
+            // that ranked above the app's real crashes.
+            exit(0)
         }
         return item
     }

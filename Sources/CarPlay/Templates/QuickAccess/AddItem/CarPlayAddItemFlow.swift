@@ -12,15 +12,15 @@ final class CarPlayAddItemFlow {
         case assist(Server)
     }
 
-    private weak var interfaceController: CPInterfaceController?
+    private weak var interfaceController: CarPlayNavigationPresenting?
     private let viewModel: CarPlayAddItemViewModel
     private let onFinish: () -> Void
 
-    private let template = CPListTemplate(title: L10n.CarPlay.QuickAccess.AddItem.title, sections: [])
+    let template = CPListTemplate(title: L10n.CarPlay.QuickAccess.AddItem.title, sections: [])
     private var steps: [Step] = []
 
     init(
-        interfaceController: CPInterfaceController?,
+        interfaceController: CarPlayNavigationPresenting?,
         viewModel: CarPlayAddItemViewModel = CarPlayAddItemViewModel(),
         onFinish: @escaping () -> Void
     ) {
@@ -36,8 +36,11 @@ final class CarPlayAddItemFlow {
             onFinish()
             return
         }
+        guard interfaceController?.pushTemplateWithinDepthLimit(template, animated: true, completion: nil) != false else {
+            onFinish()
+            return
+        }
         steps = [servers.count > 1 ? .servers : .category(servers[0])]
-        interfaceController?.pushTemplate(template, animated: true, completion: nil)
         render()
     }
 

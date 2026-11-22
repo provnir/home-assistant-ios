@@ -63,6 +63,17 @@ public class HomeAssistantAPI {
     private var rejectedReconnectAttempts = 0
     private var rejectedReconnectWorkItem: DispatchWorkItem?
     private var connectivityObserver: NSObjectProtocol?
+    /// When the websocket entered `.connecting`, so a connect that never completes can be told apart
+    /// from one that is simply slow.
+    private var webSocketConnectingSince: Date?
+
+    /// How long the websocket may sit in `.connecting` before it is torn down and started over.
+    ///
+    /// HAKit times out pings, not connects: a socket whose connect never calls back stays
+    /// `.connecting` for good, and asking it to `connect()` again is a no-op while that socket
+    /// exists. Device logs show one left that way for eight hours. Long enough to cover a slow
+    /// remote handshake plus HAKit's own backoff, and the periodic connect checks it every minute.
+    static let stuckWebSocketConnectTimeout: TimeInterval = 90
 
     /// Carries a sensor update that failed to reach this server to a later attempt.
     private(set) lazy var sensorUpdateRetry = SensorUpdateRetry { [weak self] providers in
@@ -337,6 +348,18 @@ public class HomeAssistantAPI {
 
     public func connectWebSocketIfNeeded() {
         let state = connection.state
+
+        if case .connecting = state, let since = webSocketConnectingSince,
+           Current.date().timeIntervalSince(since) >= Self.stuckWebSocketConnectTimeout {
+            Current.Log.error(
+                "websocket has been connecting for \(Int(Current.date().timeIntervalSince(since)))s; starting it over"
+            )
+            webSocketConnectingSince = nil
+            // Only a disconnect drops the socket HAKit is waiting on; a bare connect() would keep it.
+            connection.disconnect()
+            connection.connect()
+            return
+        }
 
         guard Self.shouldAttemptAutomaticWebSocketConnect(for: state) else {
             Current.Log.info("skipping automatic websocket connect while state is \(state)")
@@ -757,12 +780,18 @@ public class HomeAssistantAPI {
         return Mapper().toJSON(ident)
     }
 
+    /// - Parameters:
+    ///   - location: the fix to report, after any zone-event fuzzing.
+    ///   - rawLocation: the fix as CoreLocation delivered it, when `location` was changed to agree with a
+    ///     region event; `nil` means `location` is unchanged.
     public func SubmitLocation(
         updateType: LocationUpdateTrigger,
-        location rawLocation: CLLocation?,
+        location reportedLocation: CLLocation?,
+        rawLocation: CLLocation? = nil,
         zone: AppZone?
     ) -> Promise<Void> {
         let supportsInZones = server.info.version >= .inZonesOnLocationUpdate
+        let supportsRawLocation = server.info.version >= .rawLocationOnLocationUpdate
         let localMetadata = WebhookResponseLocation.localMetdata(
             trigger: updateType,
             zone: zone
@@ -777,16 +806,18 @@ public class HomeAssistantAPI {
             let update = WebhookUpdateLocation(
                 privacy: privacy,
                 trigger: updateType,
-                location: rawLocation,
+                location: reportedLocation,
+                rawLocation: rawLocation,
                 zone: zone,
                 supportsInZones: supportsInZones,
+                supportsRawLocation: supportsRawLocation,
                 currentSSID: currentSSID,
                 zonesContaining: { [server] in AppZone.zones(of: $0, in: server) }
             )
-            let location = privacy == .exact ? rawLocation : nil
+            let location = privacy == .exact ? reportedLocation : nil
 
             return firstly { () -> Promise<Void> in
-                let accuracyAuthorization: CLAccuracyAuthorization = CLLocationManager().accuracyAuthorization
+                let accuracyAuthorization = Current.locationManager.accuracyAuthorization
 
                 LocationHistoryEntry(
                     updateType: updateType,
@@ -1773,6 +1804,14 @@ extension HomeAssistantAPI: SensorObserver {
 
 extension HomeAssistantAPI: HAConnectionDelegate {
     public func connection(_ connection: HAConnection, didTransitionTo state: HAConnectionState) {
+        if case .connecting = state {
+            if webSocketConnectingSince == nil {
+                webSocketConnectingSince = Current.date()
+            }
+        } else {
+            webSocketConnectingSince = nil
+        }
+
         switch state {
         case .ready:
             resetRejectedReconnectRecovery()

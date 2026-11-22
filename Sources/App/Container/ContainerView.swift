@@ -26,19 +26,7 @@ struct ContainerView: View {
         }
         .navigationTitle(" ") // Remove default macOS title
         .onAppear {
-            coordinator.onOpenServer = { state.showWebView(for: $0) }
-            coordinator.onSetup = { state.reevaluate() }
-            coordinator.settingsPresenter = appSettings
-            appSettings.appCoordinator = coordinator
-            coordinator.onShowSettings = {
-                // Khala: the frontend's "Companion app" settings open Khala's own Settings screen.
-                if KhalaShell.isEnabled, KhalaShell.requestSettings() { return }
-                appSettings.presentSettings()
-            }
-            coordinator.onShowAssistSettings = { viewModel.presentAssistSettings() }
-            coordinator.onShowDownloadManager = { viewModel.presentDownloadManager($0) }
-            coordinator.onShowOnboardingPermissions = { viewModel.presentOnboardingPermissions(server: $0, steps: $1) }
-            Current.sceneManager.registerAppCoordinator(coordinator)
+            bindCoordinator()
             fadeOutLaunchSplashIfNeeded(for: state.screen)
         }
         .onChange(of: state.screen) { screen in
@@ -89,10 +77,27 @@ struct ContainerView: View {
     private func frontend(server: Server, initialPath: String?) -> some View {
         // Khala: the native shell (Today + menu) around the unchanged web frontend; see Frontend/Khala.
         KhalaShellView(server: server, initialPath: initialPath, appCoordinator: coordinator) { webViewController in
+            bindCoordinator()
             coordinator.setFrontend(webViewController)
             Current.sceneManager.setWebViewController(webViewController)
         }
         .id(server.identifier.rawValue)
+    }
+
+    private func bindCoordinator() {
+        coordinator.onOpenServer = { state.showWebView(for: $0) }
+        coordinator.onSetup = { state.reevaluate() }
+        coordinator.settingsPresenter = appSettings
+        appSettings.appCoordinator = coordinator
+        coordinator.onShowSettings = {
+            // Khala: the frontend's "Companion app" settings open Khala's own Settings screen.
+            if KhalaShell.isEnabled, KhalaShell.requestSettings() { return }
+            appSettings.presentSettings()
+        }
+        coordinator.onShowAssistSettings = { viewModel.presentAssistSettings() }
+        coordinator.onShowDownloadManager = { viewModel.presentDownloadManager($0) }
+        coordinator.onShowOnboardingPermissions = { viewModel.presentOnboardingPermissions(server: $0, steps: $1) }
+        Current.sceneManager.registerAppCoordinator(coordinator)
     }
 
     /// The recovered-server screens have no Home Assistant logo for the launch splash to morph into, so

@@ -2,10 +2,11 @@ import Foundation
 import GRDB
 @testable import HomeAssistant
 @testable import Shared
+import SharedTesting
 import Testing
 
 @MainActor
-@Suite(.serialized)
+@Suite(.sharedState)
 struct WatchComplicationBuilderEditViewModelTests {
     // MARK: - Initial state
 
@@ -34,6 +35,67 @@ struct WatchComplicationBuilderEditViewModelTests {
             #expect(viewModel.selectedSource == .customTemplate)
             #expect(viewModel.isSourceConfigured)
             #expect(viewModel.isValid)
+        }
+    }
+
+    // MARK: - Pre-filled entity
+
+    @Test func prefilledEntityOpensAsNewEntityComplicationWithAutoDesignDefaults() throws {
+        try withBuilderTestWorld(serverIds: ["server-1", "server-2"]) { database in
+            let entity = Self.batteryEntity(serverId: "server-2", icon: nil)
+            try database.write { db in
+                try entity.insert(db)
+            }
+
+            let viewModel = WatchComplicationBuilderEditViewModel(
+                prefilledEntityId: "sensor.battery",
+                serverId: "server-2"
+            )
+
+            // Still a new complication, just with the source and entity steps already answered.
+            #expect(viewModel.isNew)
+            #expect(viewModel.selectedSource == .entity)
+            #expect(viewModel.config.kind == .entity)
+            #expect(viewModel.config.serverId == "server-2")
+            #expect(viewModel.config.entityId == "sensor.battery")
+            #expect(viewModel.config.entityDisplayName == "Battery")
+            #expect(viewModel.selectedEntity?.id == entity.id)
+            #expect(viewModel.isSourceConfigured)
+            #expect(viewModel.isValid)
+            // The entity picker's auto-design runs too: battery gets the ring range and a domain icon.
+            #expect(viewModel.config.gaugeMin == 0)
+            #expect(viewModel.config.gaugeMax == 100)
+            #expect(viewModel.config.iconName == Domain(rawValue: "sensor")?.icon(deviceClass: "battery").name)
+            #expect(viewModel.entityRowTitle == "Battery")
+        }
+    }
+
+    @Test func prefilledEntityUnknownToTheAppStillOpensWithItsId() throws {
+        try withBuilderTestWorld { _ in
+            // No registry row mirrored for this entity yet, so there is nothing to auto-design from.
+            let viewModel = WatchComplicationBuilderEditViewModel(
+                prefilledEntityId: "light.kitchen",
+                serverId: "server-1"
+            )
+
+            #expect(viewModel.isNew)
+            #expect(viewModel.selectedSource == .entity)
+            #expect(viewModel.config.entityId == "light.kitchen")
+            #expect(viewModel.config.entityDisplayName == nil)
+            #expect(viewModel.selectedEntity == nil)
+            #expect(viewModel.config.iconName == Domain.light.icon().name)
+            #expect(viewModel.isSourceConfigured)
+            // The row shows what was pre-filled rather than asking to pick an entity.
+            #expect(viewModel.entityRowTitle == "light.kitchen")
+        }
+    }
+
+    @Test func entityRowTitleFallsBackToThePickerPromptWithoutAnEntity() throws {
+        try withBuilderTestWorld { _ in
+            let viewModel = WatchComplicationBuilderEditViewModel(existing: nil)
+            viewModel.selectSource(.entity)
+
+            #expect(viewModel.entityRowTitle == L10n.EntityPicker.placeholder)
         }
     }
 
@@ -308,6 +370,48 @@ struct WatchComplicationBuilderEditViewModelTests {
             }
             #expect(saved?.entityId == "sensor.battery")
             #expect(saved?.kind == .entity)
+            #expect(notified)
+        }
+    }
+
+    /// A template complication saved without a name takes the first free "Complication-N".
+    @Test func unnamedTemplateTakesTheFirstFreeNumber() throws {
+        try withBuilderTestWorld { database in
+            for number in [1, 2, 4] {
+                try WatchComplicationConfig(serverId: "server-1", kind: .customTemplate, name: "Complication-\(number)")
+                    .save()
+            }
+            let viewModel = WatchComplicationBuilderEditViewModel(existing: nil)
+            viewModel.selectSource(.customTemplate)
+            viewModel.config.name = "  "
+
+            viewModel.save()
+
+            let saved = try database.read { db in
+                try WatchComplicationConfig.fetchOne(db, key: viewModel.config.id)
+            }
+            #expect(saved?.name == "Complication-3")
+        }
+    }
+
+    /// A save the database rejects is logged; the change notification still goes out.
+    @Test func saveFailureStillPostsTheChangeNotification() async throws {
+        let previousServers = Current.servers
+        Current.servers = FakeServerManager(initial: 0)
+        defer { Current.servers = previousServers }
+        try await SettingsTestDatabase.withoutTables { _ in
+            let viewModel = WatchComplicationBuilderEditViewModel(
+                existing: WatchComplicationConfig(serverId: "server-1", name: "Named")
+            )
+            var notified = false
+            let token = NotificationCenter.default.addObserver(
+                forName: WatchComplicationConfig.didChangeNotification,
+                object: nil,
+                queue: nil
+            ) { _ in notified = true }
+            defer { NotificationCenter.default.removeObserver(token) }
+
+            viewModel.save()
             #expect(notified)
         }
     }

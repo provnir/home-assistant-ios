@@ -350,16 +350,16 @@
 "assist.carplay.playback_help.go_to_advanced.title" = "進階 > 助理";
 "assist.carplay.playback_help.go_to_troubleshooting.detail" = "開啟故障排除、然後選擇助理。";
 "assist.carplay.playback_help.go_to_troubleshooting.title" = "故障排除 > 助理";
-"assist.carplay.playback_help.message" = "如果遇到音效播放問題，請在 Home Assistant Companion 應用程式中開啟 CarPlay 設定，點選進階，開啟助理，並將 TTS 播放變更為下載並播放。";
+"assist.carplay.playback_help.message" = "如果遇到音訊播放問題，請在 Home Assistant Companion 應用程式中開啟 CarPlay 設定，點選進階，開啟助理，並將 TTS 播放變更為下載並播放。";
 "assist.carplay.playback_help.open_app.detail" = "於 Home Assistant Companion 應用程式中開啟 CarPlay 設定。";
 "assist.carplay.playback_help.open_app.title" = "Companion 應用程式";
-"assist.carplay.playback_help.title" = "音效播放助手";
+"assist.carplay.playback_help.title" = "音訊播放助手";
 "assist.carplay.processing.title" = "處理中...";
 "assist.carplay.responding.title" = "回應中...";
 "assist.carplay.tap_to_record.title" = "點擊錄製";
 "assist.chat.menu.edit" = "編輯";
 "assist.chat.menu.replay" = "重播";
-"assist.error.audio_conversion" = "無法從麥克風讀取音效。請再試一次，或使用其他麥克風。";
+"assist.error.audio_conversion" = "無法從麥克風讀取音訊。請再試一次，或使用其他麥克風。";
 "assist.error.pipelines_response" = "獲取助理 Pipeline 失敗，請檢查 Pipeline 設定。";
 "assist.error.speech_to_text_unsupported" = "助理設定沒有語音轉文字引擎。請選擇具有語音轉文字引擎的設定檔，或在助理設定中啟用裝置端語音轉文字功能。";
 "assist.modern_ui.header.title" = "助理";
@@ -445,14 +445,14 @@
 "carPlay.debug.delete_db.reset.title" = "重置設定";
 "carPlay.debug.settings.assist_session.allow_bluetooth_a2dp" = "允許藍牙 A2DP";
 "carPlay.debug.settings.assist_session.allow_bluetooth_hfp" = "允許藍牙 HFP";
-"carPlay.debug.settings.assist_session.audio_category" = "音效類別";
-"carPlay.debug.settings.assist_session.audio_mode" = "音效模式";
+"carPlay.debug.settings.assist_session.audio_category" = "音訊類別";
+"carPlay.debug.settings.assist_session.audio_mode" = "音訊模式";
 "carPlay.debug.settings.assist_session.duck_others" = "壓低其他";
 "carPlay.debug.settings.assist_session.footer" = "此些數值會於新 CarPlay Assist 工作階段開始時套用。";
-"carPlay.debug.settings.assist_session.interrupt_spoken_audio" = "中斷語音音效";
+"carPlay.debug.settings.assist_session.interrupt_spoken_audio" = "中斷語音音訊";
 "carPlay.debug.settings.assist_session.play_recording_indicator_tone" = "播放錄音指示音";
 "carPlay.debug.settings.assist_session.preferred_sample_rate" = "首選取樣率";
-"carPlay.debug.settings.assist_session.recorder_manages_audio_session" = "AudioRecorder 管理音效工作階段";
+"carPlay.debug.settings.assist_session.recorder_manages_audio_session" = "AudioRecorder 管理音訊工作階段";
 "carPlay.debug.settings.assist_session.title" = "助理工作階段";
 "carPlay.debug.settings.navigation_title" = "CarPlay 除錯";
 "carPlay.debug.settings.option.audio_category.play_and_record" = "playAndRecord";
@@ -468,17 +468,17 @@
 "carPlay.debug.settings.option.tts_playback_strategy.stream" = "串流";
 "carPlay.debug.settings.reset" = "重置";
 "carPlay.debug.settings.row_title" = "CarPlay 除錯設定";
-"carPlay.debug.settings.tts_audio_session.activate_audio_session_before_play" = "播放前啟用音效工作階段";
+"carPlay.debug.settings.tts_audio_session.activate_audio_session_before_play" = "播放前啟用音訊工作階段";
 "carPlay.debug.settings.tts_audio_session.allow_bluetooth_a2dp" = "TTS 允許藍牙 A2DP";
 "carPlay.debug.settings.tts_audio_session.allow_bluetooth_hfp" = "TTS 允許藍牙 HFP";
 "carPlay.debug.settings.tts_audio_session.category" = "TTS 類別";
 "carPlay.debug.settings.tts_audio_session.deactivate_before_reconfigure" = "重新設定前請先停用";
 "carPlay.debug.settings.tts_audio_session.duck_others" = "TTS 壓低其他聲音";
 "carPlay.debug.settings.tts_audio_session.footer" = "此部分可讓您強制重新設定專用的 TTS 工作階段，若其他應用程式開始播放後導致回應突然有聲音，最可能的原因就在於此。";
-"carPlay.debug.settings.tts_audio_session.interrupt_spoken_audio" = "TTS 中斷語音音效";
+"carPlay.debug.settings.tts_audio_session.interrupt_spoken_audio" = "TTS 中斷語音音訊";
 "carPlay.debug.settings.tts_audio_session.mode" = "TTS 模式";
 "carPlay.debug.settings.tts_audio_session.reconfigure_before_tts" = "在 TTS 之前重新設定";
-"carPlay.debug.settings.tts_audio_session.title" = "TTS 音效工作階段";
+"carPlay.debug.settings.tts_audio_session.title" = "TTS 音訊工作階段";
 "carPlay.debug.settings.tts_playback.avplayer_waits_to_minimize_stalling" = "AVPlayer 等待以盡量減少卡頓";
 "carPlay.debug.settings.tts_playback.footer" = "使用已下載的 AVAudioPlayer 策略，以判斷失敗是否與 AVPlayer 或遠端網址播放有關。";
 "carPlay.debug.settings.tts_playback.playback_delay" = "播放延遲";
@@ -502,7 +502,7 @@
 "carPlay.labels.settings.troubleshooting.assist.section.title" = "助理";
 "carPlay.labels.settings.troubleshooting.assist.tts_playback.footer" = "在某些車款中，選擇 '串流' 時可能不會播放語音回應。若發生此情況，'下載並播放' 可能可以解決此問題。";
 "carPlay.labels.settings.troubleshooting.assist.tts_playback.title" = "TTS 播放";
-"carPlay.labels.settings.troubleshooting.assist_audio.title" = "助理音效";
+"carPlay.labels.settings.troubleshooting.assist_audio.title" = "助理音訊";
 "carPlay.labels.settings.troubleshooting.force_close.title" = "強制關閉應用程式";
 "carPlay.labels.settings.troubleshooting.section.title" = "故障排除";
 "carPlay.labels.settings.troubleshooting.title" = "故障排除";
@@ -689,6 +689,7 @@
 "connection.active_url_type.toast.internal" = "使用內部網址。";
 "connection.active_url_type.toast.none" = "目前此伺服器沒有可用的有效網址。";
 "connection.active_url_type.toast.remote_ui" = "使用 Cloud Remote 介面網址。";
+"connection.active_url_type.toast.remote_ui_link" = "使用 %@ 遠端 UI 網址。";
 "connection.active_url_type.toast.title" = "連線類型";
 "connection.error.details.button.clipboard" = "複製至剪貼簿";
 "connection.error.details.button.discord" = "於 Discord 上詢問";
@@ -701,6 +702,8 @@
 "connection.error.details.title" = "連線錯誤";
 "connection.error.failed_connect.cloud.title" = "請確定 Home Assistant Cloud 雲服務訂閱為啟用狀態並連線至您的伺服器，可以於 [Nabu Casa](https://account.nabucasa.com) 網站進行驗證";
 "connection.error.failed_connect.cloud_inactive.title" = "已經於應用程式中停用 Home Assistant Cloud 雲服務使用。如果需要進行遠端存取、請開啟 Companion 應用程式設定並進行啟用。";
+"connection.error.failed_connect.cloud_inactive_link.title" = "已在應用程式中停用 %@，若需要用於遠端存取，請開啟 Companion 應用程式設定、並進行啟用。";
+"connection.error.failed_connect.cloud_link.title" = "請確定 %@  訂閱為啟用狀態並連線至您的伺服器，可以於 [Nabu Casa](https://account.nabucasa.com) 網站進行驗證";
 "connection.error.failed_connect.subtitle" = "檢查您的連線並再試一次。如果目前不在家，請確認已經設定遠端存取。";
 "connection.error.failed_connect.title" = "無法連線至 Home Assistant";
 "connection.error.failed_connect.url" = "應用程式目前正連線至";
@@ -1265,7 +1268,7 @@
 "menu.view.show_sidebar" = "顯示側邊欄";
 "mtls.beta.info" = "此為測試版功能，如果遇到任何問題，請使用下方按鈕回報。\
 \
-目前 mTLS 僅支援 iOS 17 以上版本，可能會出現與顯示通知附件、Assist TTS 音效相關問題，且在 Apple Watch 上無法完全正常運作。";
+目前 mTLS 僅支援 iOS 17 以上版本，可能會出現與顯示通知附件、Assist TTS 音訊相關問題，且在 Apple Watch 上無法完全正常運作。";
 "navBar.close" = "關閉";
 "network.error.no_active_url.body" = "開啟 companion App 設定並確認伺服器設定。內部網址僅用於定義區域網路（SSID）時使用。假如使用 VPN 進行設定，則外部網址將與內部網址相同。";
 "network.error.no_active_url.description" = "“%@“ 目前在此裝置上沒有可用的網址。";
@@ -1543,6 +1546,9 @@ Home Assistant 為開源軟體、倡導隱私保護並於您的家中進行本�
 "reminders_sync.settings.access_denied.body" = "在系統設定 App 中允許完整存取提醒事項，以同步列表。";
 "reminders_sync.settings.access_denied.title" = "需要提醒事項存取權限";
 "reminders_sync.settings.add_list" = "新增";
+"reminders_sync.settings.completed.footer" = "在同步開始之前已完成的項目，通常會保留在原本的位置。開啟此選項可將這些項目以已完成狀態複製到另一個列表，讓兩端都能看到已勾選的項目。若列表歷史記錄較長，首次同步時可能會新增大量已完成的項目。";
+"reminders_sync.settings.completed.header" = "已完成項目";
+"reminders_sync.settings.completed.title" = "包含已完成項目";
 "reminders_sync.settings.conflicts.footer" = "僅影響雙向同步。如果同一個項目在上次同步後在兩個應用程式中都編輯過，將會保留此處選擇的版本。";
 "reminders_sync.settings.conflicts.header" = "衝突";
 "reminders_sync.settings.conflicts.title" = "保留更改";
@@ -1657,6 +1663,7 @@ Home Assistant 為開源軟體、倡導隱私保護並於您的家中進行本�
 "settings.connection_section.client_certificate.remove_confirmation.message" = "憑證將從裝置中移除。需要重新匯入憑證才能使用 mTLS 驗證。";
 "settings.connection_section.client_certificate.remove_confirmation.remove" = "移除";
 "settings.connection_section.client_certificate.remove_confirmation.title" = "移除憑證？";
+"settings.connection_section.cloud_link_overrides_external" = "當透過 %@ 連線時，將不使用外部 URL。不需要進行設定，除非您想停用該服務。";
 "settings.connection_section.cloud_overrides_external" = "當透過 Cloud 連線時，將不使用外部 URL。不需要進行設定，除非您想停用 Cloud 服務。";
 "settings.connection_section.cloudhook.check_reachability.reachable" = "可達性";
 "settings.connection_section.cloudhook.check_reachability.reachable_status_code" = "可達性（HTTP） %li）";
@@ -1744,6 +1751,7 @@ Home Assistant 為開源軟體、倡導隱私保護並於您的家中進行本�
 "settings.connection_section.urls_how_it_works.active.header" = "目前使用中";
 "settings.connection_section.urls_how_it_works.active.none" = "目前的設定無法使用任何網址";
 "settings.connection_section.urls_how_it_works.away.body" = "當沒有符合的網路時，若雲端已開啟，則使用 Home Assistant Cloud 網址；否則使用外部網址。";
+"settings.connection_section.urls_how_it_works.away.body_link" = "當沒有符合的網路時，若雲端已開啟，則使用 %@ 網址；否則使用外部網址。";
 "settings.connection_section.urls_how_it_works.away.title" = "其他地方";
 "settings.connection_section.urls_how_it_works.background.body" = "感測器更新、通知動作和本地推播在應用程式關閉後仍會持續運作。在背景模式下，iOS 只有在位置存取設定為永遠允許而非使用 App 期間時，才會共享網路名稱，因此若未進行此設定，家庭網路將無法被識別，這些功能將以外出時的相同方式進行連線。";
 "settings.connection_section.urls_how_it_works.background.title" = "當應用程式在背景執行時";
@@ -1771,6 +1779,7 @@ Home Assistant 為開源軟體、倡導隱私保護並於您的家中進行本�
 "settings.connection_section.webhook.active.unavailable" = "無可用網址";
 "settings.connection_section.webhook.endpoints.footer" = "將此些網址視為敏感資訊。任何擁有這些網址的人都可以向此行動應用程式 Webhook 發送請求。";
 "settings.connection_section.webhook.footer" = "此應用程式會透過 Webhook 傳送感測器、位置及其他更新資料。Home Assistant Cloud 提供 cloudhook，讓您不在家時也能使用。若未啟用，應用程式將改以此伺服器的內部、遠端或外部網址以建立 Webhook 網址。";
+"settings.connection_section.webhook.footer_link" = "此應用程式會透過 Webhook 傳送感測器、位置及其他更新資料。%@ 提供 cloudhook，讓您不在家時也能使用。若未啟用，應用程式將改以此伺服器的內部、遠端或外部網址以建立 Webhook 網址。";
 "settings.connection_section.webhook.in_use" = "使用中";
 "settings.connection_section.webhook.title" = "Webhook";
 "settings.connection_section.websocket.status.authenticating" = "認證中";
@@ -2404,7 +2413,7 @@ Home Assistant 為開源軟體、倡導隱私保護並於您的家中進行本�
 "settings_details.notifications.sounds.error.cant_build_library_sounds_path" = "無法建立路徑 ~/Library/Sounds：%@";
 "settings_details.notifications.sounds.error.cant_get_directory_contents" = "無法列出資料夾內容：%@";
 "settings_details.notifications.sounds.error.cant_get_file_sharing_path" = "無法存取檔案共享資料夾：%@";
-"settings_details.notifications.sounds.error.conversion_failed" = "轉換音效至 PCM 32 bit 48khz 失敗：%@";
+"settings_details.notifications.sounds.error.conversion_failed" = "轉換音訊至 PCM 32 bit 48khz 失敗：%@";
 "settings_details.notifications.sounds.error.copy_error" = "複製檔案失敗：%@";
 "settings_details.notifications.sounds.error.delete_error" = "刪除檔案失敗：%@";
 "settings_details.notifications.sounds.footer" = "可以使用於通知的內建、系統或自訂音效。";
@@ -3066,6 +3075,7 @@ Home Assistant 為開源軟體、倡導隱私保護並於您的家中進行本�
 "watch.settings.client_events.title" = "日誌";
 "watch.settings.complications.empty" = "尚未設定任何複雜功能。";
 "watch.settings.complications.footer" = "直接從 Home Assistant 取得每個複雜功能目前數值。這需要一個可連線的伺服器網址（區域網路或遠端/雲端網址）。";
+"watch.settings.complications.footer_link" = "直接從 Home Assistant 取得每個複雜功能目前數值。這需要一個可連線的伺服器網址（區域網路或遠端/%@ 網址）。";
 "watch.settings.complications.last_attempt" = "最後嘗試：%@";
 "watch.settings.complications.list_footer" = "點一下複雜功能，查看上次更新時間並重試。";
 "watch.settings.complications.never" = "尚未更新";
@@ -3145,6 +3155,7 @@ Home Assistant 為開源軟體、倡導隱私保護並於您的家中進行本�
 "web_view.add_to.option.Deeplink.title" = "深度連結";
 "web_view.add_to.option.MacToolbar.title" = "Mac 工具列";
 "web_view.add_to.option.NfcTag.title" = "NFC 標籤";
+"web_view.add_to.option.WatchComplication.title" = "錶盤複雜功能";
 "web_view.add_to.option.Widget.title" = "小工具";
 "web_view.empty_state.body" = "請檢查連線或稍後再試。如果 Home Assistant 正在重新啟動，恢復線上後將重新連線。";
 "web_view.empty_state.clean_cache_and_reload_button" = "清除暫存並重新載入";
@@ -3423,6 +3434,7 @@ Companion 應用程式相關資料以獲得更詳細資訊。";
 "widgets.todo_list.due_date.in_format" = "於 %@";
 "widgets.todo_list.due_date.now" = "目前";
 "widgets.todo_list.due_date.today" = "今日";
+"widgets.todo_list.load_failed" = "無法更新。點選重新整理。";
 "widgets.todo_list.parameter.item_id" = "項目 ID";
 "widgets.todo_list.parameter.list" = "列表";
 "widgets.todo_list.parameter.list_id" = "列表 ID";

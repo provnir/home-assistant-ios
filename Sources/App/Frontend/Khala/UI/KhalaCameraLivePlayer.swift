@@ -115,10 +115,10 @@ struct KhalaCameraLivePlayer: View {
             webKitPath = nil
             playback.clear()
             let entityId = cameraEntityId
-            let capabilities = await CameraCapabilities.fetch(server: server, cameraEntityId: entityId)
+            let outcome = await CameraCapabilities.fetch(server: server, cameraEntityId: entityId)
             guard entityId == cameraEntityId else { return }
             // The hidden Live engine setting and this app session's WebKit failures shape the plan and the page.
-            let players = CameraStreamPlan.players(for: capabilities)
+            let players = CameraStreamPlan.players(for: outcome)
             lanes = KhalaLiveEngineStore.lanes(players, cameraEntityId: entityId)
             playback.start(with: KhalaLiveEngineStore.plan(players, cameraEntityId: entityId))
         }

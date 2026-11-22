@@ -27,14 +27,14 @@ public let package = Package(
         .library(name: "PromiseKitDynamic", type: .dynamic, targets: ["PromiseKitDynamic"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/mxcl/PromiseKit/", exact: "8.1.1"),
+        .package(url: "https://github.com/mxcl/PromiseKit/", exact: "8.2.0"),
         // HAKit+PromiseKit hard-depends on the *static* PromiseKit product; if any
         // target links HAKit+PromiseKit directly, a second static copy of PromiseKit
         // is baked into that binary (Shared.framework) alongside this dynamic one,
         // reintroducing the duplicate-metadata crash. So this dynamic framework also
         // subsumes HAKit+PromiseKit: everyone links THIS instead, giving a single
         // shared copy of PromiseKit.
-        .package(url: "https://github.com/home-assistant/HAKit.git", exact: "0.4.19"),
+        .package(url: "https://github.com/home-assistant/HAKit.git", exact: "0.4.21"),
     ],
     targets: [
         .target(

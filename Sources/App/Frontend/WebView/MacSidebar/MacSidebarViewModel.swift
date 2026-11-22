@@ -12,6 +12,8 @@ final class MacSidebarViewModel: ObservableObject {
     @Published private(set) var hiddenItems: [MacSidebarItem] = []
     @Published private(set) var user: HAResponseCurrentUser?
     @Published private(set) var accentColor: Color = .haPrimary
+    @Published private(set) var badgeColor: Color = .haPrimary
+    @Published private(set) var badgeTextColor: Color = .white
 
     /// Legacy per-browser sidebar preferences the frontend still honours when the server-side user data
     /// has none; see the `localStorage` fallbacks in `ha-sidebar.ts` and `data/panel.ts`.
@@ -37,12 +39,18 @@ final class MacSidebarViewModel: ObservableObject {
     /// Stands in for `coreUserData.defaultPanel` until the live `core` value arrives, which is the only thing
     /// that clears it: a cached default must not outlive one the user has since removed.
     private var cachedUserDefaultPanel: String?
-    private var userDefaultPanel: String? { coreUserData.defaultPanel ?? cachedUserDefaultPanel }
+    private var userDefaultPanel: String? {
+        coreUserData.defaultPanel ?? cachedUserDefaultPanel
+    }
+
     private var systemDefaultPanel: String?
     private var isAdmin = false
     private var userName: String?
     private var notificationIds: Set<String> = []
     private var tokens: [HACancellable] = []
+    private var subscribedConnection: ObjectIdentifier?
+    /// Set between `start()` and `stop()`, so a start that found no API yet can subscribe once one connects.
+    private var isStarted = false
     private var cancellables = Set<AnyCancellable>()
     private let snapshotStore: MacSidebarSnapshotStore
 
@@ -59,6 +67,7 @@ final class MacSidebarViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.readLegacyPreferences()
+                self?.subscribeIfNeeded()
             }
             .store(in: &cancellables)
 
@@ -66,6 +75,16 @@ final class MacSidebarViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.updateAccentColor()
+            }
+            .store(in: &cancellables)
+
+        // At a cold launch the server's URL is not evaluated yet when the sidebar first appears, so there is
+        // no API to subscribe through. The frontend connecting (above) means the URL resolved since; the API
+        // finishing its own connection is the other moment to try again.
+        NotificationCenter.default.publisher(for: HomeAssistantAPI.didConnectNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.subscribeIfNeeded()
             }
             .store(in: &cancellables)
 
@@ -79,7 +98,29 @@ final class MacSidebarViewModel: ObservableObject {
     }
 
     func start() {
-        guard tokens.isEmpty, let connection = Current.api(for: server)?.connection else { return }
+        isStarted = true
+        subscribeIfNeeded()
+    }
+
+    func stop() {
+        isStarted = false
+        cancelSubscriptions()
+    }
+
+    private func cancelSubscriptions() {
+        tokens.forEach { $0.cancel() }
+        tokens = []
+        subscribedConnection = nil
+    }
+
+    private func subscribeIfNeeded() {
+        guard isStarted, let connection = Current.api(for: server)?.connection else { return }
+        let connectionIdentifier = ObjectIdentifier(connection)
+        if subscribedConnection == connectionIdentifier {
+            return
+        }
+        cancelSubscriptions()
+        subscribedConnection = connectionIdentifier
 
         tokens.append(connection.caches.panels.subscribe { [weak self] _, panels in
             Task { @MainActor [weak self] in
@@ -140,7 +181,7 @@ final class MacSidebarViewModel: ObservableObject {
                 request: .init(type: "persistent_notification/subscribe")
             ),
             handler: { [weak self] _, message in
-                Task { @MainActor [weak self] in
+                Self.onMain { [weak self] in
                     guard let self else { return }
                     notificationIds = message.apply(to: notificationIds)
                     rebuild()
@@ -149,9 +190,12 @@ final class MacSidebarViewModel: ObservableObject {
         ))
     }
 
-    func stop() {
-        tokens.forEach { $0.cancel() }
-        tokens = []
+    private static func onMain(_ body: @escaping @MainActor () -> Void) {
+        if Thread.isMainThread {
+            MainActor.assumeIsolated(body)
+        } else {
+            DispatchQueue.main.async { MainActor.assumeIsolated(body) }
+        }
     }
 
     func select(itemId: String) {
@@ -343,7 +387,12 @@ final class MacSidebarViewModel: ObservableObject {
     }
 
     private func updateAccentColor() {
-        accentColor = Current.frontendTheme()
-            .color(of: FrontendColors.primaryColor.rawValue, for: server.identifier.rawValue) ?? .haPrimary
+        let theme = Current.frontendTheme()
+        let serverId = server.identifier.rawValue
+        accentColor = theme.color(of: FrontendColors.primaryColor.rawValue, for: serverId) ?? .haPrimary
+        badgeColor = theme.color(FrontendColors.accentColor, for: serverId)
+        badgeTextColor = theme.color(of: Self.textAccentColorName, fallback: .textPrimaryColor, for: serverId)
     }
+
+    private static let textAccentColorName = "--text-accent-color"
 }

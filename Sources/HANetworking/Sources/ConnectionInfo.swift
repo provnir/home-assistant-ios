@@ -67,6 +67,15 @@ public struct ConnectionInfo: Codable, Equatable {
     public var overrideActiveURLType: URLType?
     public private(set) var activeURLType: URLType = .external
 
+    /// This connection with the URL state worked out at runtime cleared. `activeURLType` and
+    /// `overrideActiveURLType` are re-evaluated after decoding, so they are never a settings change.
+    public var withoutRuntimeURLState: ConnectionInfo {
+        var info = self
+        info.overrideActiveURLType = nil
+        info.activeURLType = .external
+        return info
+    }
+
     public var isLocalPushEnabled = true {
         didSet {
             guard oldValue != isLocalPushEnabled else { return }
@@ -252,7 +261,7 @@ public struct ConnectionInfo: Codable, Equatable {
             activeURLType = .internal
             url = internalURL
         } else if let remoteUIURL, useCloud {
-            // Home Assistant Cloud connection
+            // Home Assistant Link connection
             activeURLType = .remoteUI
             url = remoteUIURL
         } else if let externalURL {
@@ -343,7 +352,7 @@ public struct ConnectionInfo: Codable, Equatable {
     /// URL types that can be used to authenticate against this server, ordered by preference:
     /// remote UI > external > internal.
     ///
-    /// Remote UI is dropped when the user opted out of Home Assistant Cloud (`useCloud`): a server can
+    /// Remote UI is dropped when the user opted out of Home Assistant Link (`useCloud`): a server can
     /// keep a remote UI URL around while the user connects through their own external URL, and
     /// authenticating against the cloud URL in that case would ignore that choice. This generally
     /// follows how `evaluateActiveURL()` picks a URL, with one deliberate exception — when remote UI is
