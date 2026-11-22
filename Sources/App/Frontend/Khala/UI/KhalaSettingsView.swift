@@ -55,6 +55,7 @@ struct KhalaSettingsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)
+            .khalaColumn()
             // Room for the shell's menu button above the title.
             .padding(.top, 9 + 44 + 4)
             .padding(.bottom, 24)

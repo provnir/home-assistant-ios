@@ -138,6 +138,7 @@ struct KhalaTodayView: View {
                     }
                 }
                 .padding(.horizontal, KhalaTheme.gutter)
+                .khalaColumn()
                 // Room for the floating buttons above the title, and below the earliest row.
                 .padding(.top, Self.nowInset)
                 .padding(.bottom, 48)

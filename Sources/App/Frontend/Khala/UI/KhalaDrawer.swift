@@ -78,6 +78,22 @@ final class KhalaDrawer: NSObject, ObservableObject {
 
     var isSettling: Bool { spring != nil }
 
+    /// The menu is a sidebar beside the card (`KhalaDrawerMath.showsSidebar`): the card stays put and no drag
+    /// moves it. Going pinned lands the card closed at once.
+    var isPinned = false {
+        didSet {
+            guard isPinned != oldValue, isPinned else { return }
+            if mode != nil {
+                pan.isEnabled = false
+                pan.isEnabled = true
+                mode = nil
+            }
+            stopSpring()
+            isOpen = false
+            setPosition(0)
+        }
+    }
+
     override init() {
         super.init()
         pan.addTarget(self, action: #selector(handlePan(_:)))
@@ -132,9 +148,11 @@ final class KhalaDrawer: NSObject, ObservableObject {
         let newWidth = CGFloat(KhalaDrawerMath.openWidth(container: Double(width)))
         guard newWidth != openWidth else { return }
         openWidth = newWidth
-        if !isSettling, mode == nil {
-            setPosition(isOpen ? openWidth : 0)
-        }
+        guard mode == nil else { return }
+        // A resize is a jump, not a motion (iPhone Duo folding or unfolding, Split View, iPad rotation): a spring
+        // still heading for the old open width would land the card short of, or past, the new one.
+        stopSpring()
+        setPosition(isOpen ? openWidth : 0)
     }
 
     // MARK: Programmatic
@@ -143,6 +161,7 @@ final class KhalaDrawer: NSObject, ObservableObject {
     /// rest it starts at zero velocity; a spring already running hands over its own velocity. Reduce Motion: short,
     /// no bounce.
     func setOpen(_ open: Bool) {
+        guard !isPinned || !open else { return }
         let target = open ? openWidth : 0
         if open == isOpen {
             if let spring, spring.target == Double(target) { return }
@@ -386,7 +405,7 @@ extension KhalaDrawer: UIGestureRecognizerDelegate {
     /// The one decision, at the slop: horizontal enough, the right way, one finger.
     func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         guard gestureRecognizer === pan, let anchor else { return true }
-        guard pan.numberOfTouches <= 1, !isBlocked else { return false }
+        guard pan.numberOfTouches <= 1, !isBlocked, !isPinned else { return false }
         let sign: CGFloat = isRightToLeft ? -1 : 1
         var vector = pan.translation(in: anchor)
         if vector == .zero { vector = pan.velocity(in: anchor) }

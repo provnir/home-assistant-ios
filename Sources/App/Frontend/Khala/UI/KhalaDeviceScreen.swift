@@ -57,6 +57,7 @@ struct KhalaDeviceScreen<Title: View, Trailing: View, Content: View>: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, KhalaTheme.gutter)
+                .khalaColumn()
                 .padding(.top, 9 + 44 + 4)
                 .padding(.bottom, tabs.isEmpty ? 32 : 62 + 8 + 32)
             }

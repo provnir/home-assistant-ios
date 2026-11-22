@@ -23,6 +23,7 @@ struct KhalaShellView: View {
     @StateObject private var home: KhalaHomeViewModel
     @Environment(\.appSettingsPresenter) private var appSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var searchFocusRequest = 0
     @State private var showsDeviceSettings = false
     @State private var showsAbout = false
@@ -74,6 +75,13 @@ struct KhalaShellView: View {
     private var drawer: some View {
         GeometryReader { proxy in
             let openWidth = CGFloat(KhalaDrawerMath.openWidth(container: Double(proxy.size.width)))
+            // Big screen (iPhone Duo open, iPad): the menu stays beside the card. The same views either way, only
+            // their frames change, so folding or unfolding never rebuilds the web frontend.
+            let pinned = KhalaDrawerMath.showsSidebar(
+                isRegularWidth: horizontalSizeClass == .regular,
+                container: Double(proxy.size.width)
+            )
+            let sidebarWidth = CGFloat(KhalaDrawerMath.sidebarWidth)
 
             ZStack(alignment: .topLeading) {
                 // The whole window, not just the panel's width: a corner of the moving card never exposes a
@@ -82,9 +90,9 @@ struct KhalaShellView: View {
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
 
-                menu
-                    .frame(width: openWidth)
-                    .accessibilityHidden(!shell.isMenuOpen)
+                menu(isOpen: shell.isMenuOpen || pinned)
+                    .frame(width: pinned ? sidebarWidth : openWidth)
+                    .accessibilityHidden(!(shell.isMenuOpen || pinned))
                     // VoiceOver's two-finger scrub closes the open menu.
                     .accessibilityAction(.escape) { shell.setMenuOpen(false) }
                     // The media sheet (theater, speakers, a car's player) hangs off the menu, which is always
@@ -100,9 +108,11 @@ struct KhalaShellView: View {
                     }
 
                 KhalaDrawerStage(drawer: shell.drawer) {
-                    card
+                    card(showsMenuButton: !pinned)
                 }
+                .padding(.leading, pinned ? sidebarWidth : 0)
             }
+            .task(id: pinned) { shell.isSidebarPinned = pinned }
             // The drawer's coordinate space and the hook its pan is installed through (touch-transparent).
             .background(KhalaDrawerAnchor(drawer: shell.drawer).ignoresSafeArea())
         }
@@ -169,7 +179,7 @@ struct KhalaShellView: View {
         }
     }
 
-    private var menu: some View {
+    private func menu(isOpen: Bool) -> some View {
         KhalaMenuView(
             homeName: server.info.name,
             summary: home.timeline.summary,
@@ -179,7 +189,7 @@ struct KhalaShellView: View {
             automationCount: home.automationCount,
             devices: home.devices,
             areas: home.areas,
-            isOpen: shell.isMenuOpen,
+            isOpen: isOpen,
             searchFocusRequest: searchFocusRequest,
             dashboards: shell.dashboards,
             dashboardIcons: shell.dashboardIcons,
@@ -213,7 +223,7 @@ struct KhalaShellView: View {
 
     /// The screen card: the web frontend (always mounted), a native screen over it, the pinned menu button and,
     /// while the menu is open, the catcher that closes it.
-    private var card: some View {
+    private func card(showsMenuButton: Bool) -> some View {
         ZStack(alignment: .topLeading) {
             ZStack(alignment: .topLeading) {
                 // Hidden, not removed, under a native screen: it stays mounted (deep links, notifications, the
@@ -266,7 +276,7 @@ struct KhalaShellView: View {
                 // Pinned top-leading in the safe area, above the content and never part of its flow: the one
                 // leading control on every screen. Over the web UI the dashboards header swaps it for Back while
                 // the frontend is on a sub-page or dialog, and the leading-edge swipe goes Back too (`KhalaDrawer`).
-                if shell.destination != .dashboards || (shell.isWebScreen && !shell.showsBackInHeader) {
+                if showsMenuButton, shell.destination != .dashboards || (shell.isWebScreen && !shell.showsBackInHeader) {
                     KhalaGlassButton(symbol: .sidebarLeft, accessibilityLabel: KhalaText.openMenu) {
                         shell.setMenuOpen(true)
                     }
