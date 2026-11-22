@@ -48,8 +48,9 @@ final class KhalaShellModel: ObservableObject {
 
     /// The user's dashboards, as Home Assistant's own sidebar lists them (order, hidden panels, default first).
     @Published private(set) var dashboards: [KhalaDashboard] = []
-    /// Their sidebar icons, by `KhalaDashboard.id`.
-    private(set) var dashboardIcons: [String: FrontendIcon] = [:]
+    /// Their sidebar icons, by `KhalaDashboard.id`. Published too: a dashboard whose icon alone changed on the
+    /// server redraws its row.
+    @Published private(set) var dashboardIcons: [String: FrontendIcon] = [:]
     /// The frontend page on screen (the app's URL observation).
     @Published private(set) var frontendPath: String? {
         didSet {
@@ -77,6 +78,10 @@ final class KhalaShellModel: ObservableObject {
     /// admin-only panel out for them).
     @Published private(set) var serverSettings: KhalaDashboard?
     private var panelsToken: HACancellable?
+    /// The connection `panelsToken` listens on, so a reconnect through a new API subscribes again.
+    private var panelsConnection: ObjectIdentifier?
+    /// Retries the panels subscription when the API connects (`subscribePanelsIfNeeded`).
+    private var panelsRetry: AnyCancellable?
 
     // MARK: Settings (`KhalaShellModel+Settings`)
 
@@ -198,8 +203,29 @@ final class KhalaShellModel: ObservableObject {
         self.sidebar = sidebar
         sidebar.start()
 
-        // The settings panel's url from the panels list itself rather than a hard-coded `/config`.
-        panelsToken = Current.api(for: server)?.connection.caches.panels.subscribe { [weak self] _, panels in
+        // At a cold launch the server's API may not exist yet when the web view attaches (the same gap
+        // `MacSidebarViewModel.subscribeIfNeeded` closes), and a subscription attempted then never happened:
+        // try again when the frontend comes up and whenever the API connects.
+        panelsRetry = overlayState.$connectionState
+            .filter(\.isReadyForDisplay)
+            .map { _ in () }
+            .merge(with: NotificationCenter.default
+                .publisher(for: HomeAssistantAPI.didConnectNotification)
+                .map { _ in () })
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] in self?.subscribePanelsIfNeeded() }
+        subscribePanelsIfNeeded()
+    }
+
+    /// The settings panel's url from the panels list itself rather than a hard-coded `/config`. Subscribes once per
+    /// API connection; a no-op until there is one.
+    private func subscribePanelsIfNeeded() {
+        guard let connection = Current.api(for: server)?.connection else { return }
+        let identifier = ObjectIdentifier(connection)
+        guard panelsConnection != identifier else { return }
+        panelsToken?.cancel()
+        panelsConnection = identifier
+        panelsToken = connection.caches.panels.subscribe { [weak self] _, panels in
             let panel = panels.allPanels.first { $0.component == "config" }
             Task { @MainActor [weak self] in
                 let settings = panel.map { KhalaDashboard(id: $0.path, title: KhalaText.serverSettings) }
@@ -217,7 +243,9 @@ final class KhalaShellModel: ObservableObject {
             icons[item.id] = item.icon
             return KhalaDashboard(id: item.id, title: item.title)
         }
-        dashboardIcons = icons
+        if dashboardIcons != icons {
+            dashboardIcons = icons
+        }
         if self.dashboards != dashboards {
             self.dashboards = dashboards
         }
