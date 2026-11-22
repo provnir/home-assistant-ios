@@ -21,14 +21,14 @@ private enum Servers {
 struct KhalaSettingsCatalogTests {
     @Test func sectionsFollowTheFrontendsDashboardAndWhatTheServerHas() {
         let ids = KhalaSettingsCatalog.visibleSections(for: Servers.container).map(\.id)
+        // No Home Assistant Cloud even on a server that loads it: Khala leaves Nabu Casa out.
         #expect(ids == [
-            "cloud", "devices", "automations", "areas", "dashboards", "connectivity", "voice", "people", "system",
-            "tools", "about",
+            "devices", "automations", "areas", "dashboards", "connectivity", "voice", "people", "system", "tools",
+            "about",
         ])
-        // Home Assistant OS: Apps, no Cloud.
+        // Home Assistant OS: Apps.
         let supervised = KhalaSettingsCatalog.visibleSections(for: Servers.supervised).map(\.id)
         #expect(supervised.contains("apps"))
-        #expect(!supervised.contains("cloud"))
         #expect(supervised.first == "devices")
     }
 
@@ -180,7 +180,7 @@ struct KhalaSettingsSearchTests {
 
     @Test func matchingIgnoresCaseAndDiacritics() {
         #expect(KhalaSettingsSearch.results(for: "ZÖNES", in: entries).first?.title == "Zones")
-        #expect(KhalaSettingsSearch.results(for: "nabu", in: entries).first?.title == "Home Assistant Cloud")
+        #expect(KhalaSettingsSearch.results(for: "nabu", in: entries).isEmpty)
     }
 
     @Test func wordStartsBeatInnerMatches() {

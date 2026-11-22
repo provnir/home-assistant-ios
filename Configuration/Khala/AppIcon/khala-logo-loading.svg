@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 176 176">
+  <!-- Khala's loading logo (HomeAssistantStandByView): khala-logo.svg, geometry unchanged so it lines up with
+       the static Logo, with the sun's glow breathing and the three horizon dots lighting in turn. -->
+  <style>
+    .glow { animation: glow 1300ms ease-in-out infinite; transform-origin: 101.9px 76.5px; }
+    .dot { animation: dot 1300ms ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+    .d2 { animation-delay: 200ms; } .d3 { animation-delay: 400ms; }
+    @keyframes glow { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.35); opacity: 0.55; } }
+    @keyframes dot { 0%, 60%, 100% { transform: scale(1); } 25% { transform: scale(1.6); } }
+  </style>
+  <defs>
+    <linearGradient id="ink" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#16223a"/>
+      <stop offset="1" stop-color="#05070e"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="58%" cy="44%" r="50%">
+      <stop offset="0" stop-color="#ffce82" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#ffce82" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="176" height="176" rx="39.4" fill="url(#ink)"/>
+  <rect width="176" height="176" rx="39.4" fill="url(#glow)"/>
+  <path d="M24 120 H152" stroke="#f3f1ec" stroke-opacity="0.38" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M32 120 Q88 26 144 120" fill="none" stroke="#f3e7cf" stroke-opacity="0.9" stroke-width="4" stroke-linecap="round"/>
+  <circle class="glow" cx="101.9" cy="76.5" r="17" fill="#f2b35b" fill-opacity="0.2"/>
+  <circle cx="101.9" cy="76.5" r="9" fill="#f2b35b"/>
+  <g fill="#6fd6c8"><circle class="dot" cx="58" cy="138" r="2.6"/><circle class="dot d2" cx="88" cy="138" r="2.6"/><circle class="dot d3" cx="118" cy="138" r="2.6"/></g>
+</svg>

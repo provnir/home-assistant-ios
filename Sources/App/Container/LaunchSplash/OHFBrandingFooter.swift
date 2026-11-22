@@ -4,6 +4,9 @@ import SwiftUI
 /// The "A PROJECT FROM THE" caption over the Open Home Foundation wordmark, as laid out at the bottom
 /// of `LaunchScreen.storyboard`. Shared by the launch splash overlay and the first stand-by screen of a
 /// cold launch so the branding stays put across the splash → stand-by hand-off.
+///
+/// Khala hides it (here and in the storyboard) but keeps its space, so the splash → stand-by layout is unchanged:
+/// Khala is a personal fork, not an Open Home Foundation project.
 struct OHFBrandingFooter: View {
     /// Mirrors the OHF logo constraints in `LaunchScreen.storyboard`.
     static let logoSize = CGSize(width: 220, height: 25)
@@ -23,6 +26,7 @@ struct OHFBrandingFooter: View {
                 .scaledToFit()
                 .frame(width: Self.logoSize.width, height: Self.logoSize.height)
         }
+        .hidden()
     }
 }
 
