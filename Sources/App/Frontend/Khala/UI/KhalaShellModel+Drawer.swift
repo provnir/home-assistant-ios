@@ -21,7 +21,8 @@ extension KhalaShellModel {
     /// The menu button (and the screens' own menu or search buttons, `menuRequests`): opens or closes with one light
     /// impact when the state changes.
     func setMenuOpen(_ open: Bool) {
-        guard open != isMenuOpen else { return }
+        // A sidebar is always open: requests to open it (the screens' search) only focus it.
+        guard !isSidebarPinned, open != isMenuOpen else { return }
         drawer.playToggleFeedback()
         isMenuOpen = open
     }

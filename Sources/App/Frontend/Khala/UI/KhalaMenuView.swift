@@ -200,6 +200,11 @@ struct KhalaMenuView: View {
             search = ""
             isSearchFocused = false
         }
+        // As a sidebar the menu never closes: a choice made from a search still clears it.
+        .onChange(of: destination) { _ in
+            search = ""
+            isSearchFocused = false
+        }
     }
 
     private func sectionTitle(_ title: String) -> some View {

@@ -24,6 +24,20 @@ enum KhalaDrawerMath {
         min(max(0, container) * openFraction, maximumOpenWidth)
     }
 
+    // MARK: Sidebar (big screens)
+
+    /// The menu's width when it stays on screen beside the card.
+    static let sidebarWidth = 320.0
+    /// The narrowest card a sidebar may leave: below it the menu stays a drawer.
+    static let minimumCardWidthBesideSidebar = 420.0
+
+    /// Whether the menu is a permanent sidebar instead of a drawer (Nir: "always show as sidebar on big screen").
+    /// A regular width (iPhone Duo's inner display, iPad) that leaves the card enough room; a compact width (any
+    /// iPhone, the Duo's outer display, a Split View half) keeps the drawer.
+    static func showsSidebar(isRegularWidth: Bool, container: Double) -> Bool {
+        isRegularWidth && container - sidebarWidth >= minimumCardWidthBesideSidebar
+    }
+
     /// 0 = closed, 1 = open (clamped: a rubber-banded card reads as open).
     static func progress(position: Double, openWidth: Double) -> Double {
         guard openWidth > 0 else { return 0 }

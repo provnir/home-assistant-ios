@@ -15,6 +15,17 @@ struct KhalaDrawerMathTests {
         #expect(KhalaDrawerMath.progress(position: 10, openWidth: 0) == 0)
     }
 
+    @Test func sidebarOnlyOnBigScreens() {
+        // Compact width (any iPhone, iPhone Duo closed, a Split View half): always the drawer.
+        #expect(!KhalaDrawerMath.showsSidebar(isRegularWidth: false, container: 430))
+        #expect(!KhalaDrawerMath.showsSidebar(isRegularWidth: false, container: 1000))
+        // Regular width with room for the card beside it (iPhone Duo open, iPad): the sidebar.
+        #expect(KhalaDrawerMath.showsSidebar(isRegularWidth: true, container: 740))
+        #expect(KhalaDrawerMath.showsSidebar(isRegularWidth: true, container: 1024))
+        // Regular but too narrow to leave the card 420 pt: still the drawer.
+        #expect(!KhalaDrawerMath.showsSidebar(isRegularWidth: true, container: 739))
+    }
+
     @Test func cornersAndShadowFollowProgress() {
         #expect(KhalaDrawerMath.cornerRadius(progress: 0) == 0)
         #expect(KhalaDrawerMath.cornerRadius(progress: 0.125) == 22)

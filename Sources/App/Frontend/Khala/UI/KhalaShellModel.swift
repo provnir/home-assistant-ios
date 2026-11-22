@@ -32,6 +32,16 @@ final class KhalaShellModel: ObservableObject {
     /// frame of motion never re-renders the shell.
     let drawer = KhalaDrawer()
 
+    /// The menu is a sidebar beside the card on a big screen (set by the shell from its size class and width): there
+    /// is nothing to open or close, so the menu counts as closed for the card and stays visible on its own.
+    @Published var isSidebarPinned = false {
+        didSet {
+            guard isSidebarPinned != oldValue else { return }
+            if isSidebarPinned { isMenuOpen = false }
+            drawer.isPinned = isSidebarPinned
+        }
+    }
+
     /// Routing (`KhalaShellModel+Routing`): the media sheet on display.
     @Published var sheet: KhalaSheetRequest?
 
