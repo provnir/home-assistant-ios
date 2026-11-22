@@ -115,6 +115,9 @@ jobs:
       profile_uuid: ${{ steps.asc.outputs.profile_uuid }}
       # The App Store profile itself (public: certificate + entitlements, no key).
       profile_b64: ${{ steps.asc.outputs.profile_b64 }}
+      # The same for the local-push extension (PushProvider), its own App ID and profile.
+      push_profile_uuid: ${{ steps.asc.outputs.push_profile_uuid }}
+      push_profile_b64: ${{ steps.asc.outputs.push_profile_b64 }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -175,6 +178,7 @@ jobs:
       SHORT_VERSION: ${{ needs.prepare.outputs.short_version }}
       BUILD_NUMBER: ${{ needs.prepare.outputs.build_number }}
       PROFILE_UUID: ${{ needs.prepare.outputs.profile_uuid }}
+      PUSH_PROFILE_UUID: ${{ needs.prepare.outputs.push_profile_uuid }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -225,6 +229,7 @@ jobs:
           APPSTORE_DIST_P12_BASE64: ${{ inputs.signing == 'manual' && secrets.APPSTORE_DIST_P12_BASE64 || '' }}
           APPSTORE_DIST_P12_PASSWORD: ${{ inputs.signing == 'manual' && secrets.APPSTORE_DIST_P12_PASSWORD || '' }}
           PROFILE_B64: ${{ needs.prepare.outputs.profile_b64 }}
+          PUSH_PROFILE_B64: ${{ needs.prepare.outputs.push_profile_b64 }}
         run: bash Configuration/Khala/archive.sh
       - name: Hand the signed IPA to the Ubuntu publisher
         id: ipa

@@ -11,9 +11,10 @@ cd "$ROOT"
 
 python3 "$SHIP" apply --team "$APPLE_TEAM_ID" --prefix "$BUNDLE_ID_PREFIX"
 python3 "$SHIP" xcconfig --mode "$SIGNING" --team "$APPLE_TEAM_ID" --version "$SHORT_VERSION" \
-    --build "$BUILD_NUMBER" --profile "${PROFILE_UUID:-}" --out "$RUNNER_TEMP/khala.xcconfig"
+    --build "$BUILD_NUMBER" --profile "${PROFILE_UUID:-}" --push-profile "${PUSH_PROFILE_UUID:-}" \
+    --out "$RUNNER_TEMP/khala.xcconfig"
 [[ "$SIGNING" == unsigned ]] || python3 "$SHIP" export-options --mode "$SIGNING" --team "$APPLE_TEAM_ID" --bundle-id "$BUNDLE_ID" \
-    --profile "${PROFILE_UUID:-}" --out "$RUNNER_TEMP/ExportOptions.plist"
+    --profile "${PROFILE_UUID:-}" --push-profile "${PUSH_PROFILE_UUID:-}" --out "$RUNNER_TEMP/ExportOptions.plist"
 
 KEY_DIR="$RUNNER_TEMP/asc-key"
 KEYCHAIN="$RUNNER_TEMP/khala-signing.keychain-db"
@@ -26,7 +27,8 @@ trap cleanup EXIT
 
 auth=()
 if [[ "$SIGNING" == manual ]]; then
-    : "${APPSTORE_DIST_P12_BASE64:?}" "${APPSTORE_DIST_P12_PASSWORD:?}" "${PROFILE_UUID:?}" "${PROFILE_B64:?}"
+    : "${APPSTORE_DIST_P12_BASE64:?}" "${APPSTORE_DIST_P12_PASSWORD:?}" "${PROFILE_UUID:?}" "${PROFILE_B64:?}" \
+      "${PUSH_PROFILE_UUID:?}" "${PUSH_PROFILE_B64:?}"
     # Throwaway keychain with a random password: the distribution key lives only here and only
     # for this job (deleted on exit). Never Xcode's own Apple login.
     KC_PASS=$(openssl rand -hex 24)
@@ -51,6 +53,7 @@ if [[ "$SIGNING" == manual ]]; then
                "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
         mkdir -p "$dir"
         printf '%s' "$PROFILE_B64" | base64 --decode > "$dir/$PROFILE_UUID.mobileprovision"
+        printf '%s' "$PUSH_PROFILE_B64" | base64 --decode > "$dir/$PUSH_PROFILE_UUID.mobileprovision"
     done
 elif [[ "$SIGNING" == cloud ]]; then
     : "${APP_STORE_CONNECT_KEY_ID:?}" "${APP_STORE_CONNECT_ISSUER_ID:?}" "${APP_STORE_CONNECT_PRIVATE_KEY:?}"
@@ -134,6 +137,8 @@ assert ent.get("get-task-allow") is not True, "development entitlement in a dist
 assert "com.apple.developer.associated-domains" not in ent, "applinks leaked into the signature"
 assert ent.get("com.apple.security.application-groups") == [f"group.{prefix}.homeassistant"], \
     "app group missing: the app keeps its database in it"
+assert "app-push-provider" in ent.get("com.apple.developer.networking.networkextension", []), \
+    "local push (app-push-provider) missing from the App's signature"
 print("Distribution signature and entitlements verified:", ", ".join(sorted(ent)))
 PY
 echo "- Signed Khala.ipa exported and its signature verified ($SIGNING signing)." >> "$GITHUB_STEP_SUMMARY"

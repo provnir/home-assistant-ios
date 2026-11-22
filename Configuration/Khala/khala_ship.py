@@ -62,6 +62,15 @@ APP_TARGET = "App"
 # extensions, the WatchApp and the Catalyst Launcher) is dropped from the build: each would
 # need its own App ID, provisioning and, for several, Apple-approval entitlements.
 KEEP_PRODUCT_TYPES = {"com.apple.product-type.framework"}
+# App extensions Khala DOES ship, by target name -> bundle id suffix. The PushProvider is Home Assistant's
+# "local push": on the home Wi-Fi it holds its own connection to the server, no Apple and no relay. It needs its
+# own App ID (prefix.HomeAssistant.PushProvider) with App Groups + Network Extensions, and its own profile.
+KEPT_EXTENSIONS = {"Extensions-PushProvider": ".PushProvider"}
+PUSH_TARGET = "Extensions-PushProvider"
+EXTENSION_ENTITLEMENTS = "Configuration/Entitlements/Extension-ios.entitlements"
+# Added at build time by activate_special_entitlements.sh to every target when ENABLE_PUSH_PROVIDER is on.
+NETWORK_EXTENSION = "com.apple.developer.networking.networkextension"
+APP_PUSH_PROVIDER = "app-push-provider"
 ASSOCIATED_DOMAINS = "com.apple.developer.associated-domains"
 # Upstream's "share a Matter device to Apple Home" (#5905) asks for HomeKit. Khala does not enable new
 # Apple capabilities on its App ID, so the entitlement is dropped: the share call then fails on the user's
@@ -203,7 +212,7 @@ def trim_plan(objects):
         if target_id is None:  # package product / plugin dependency: keep
             continue
         target = objects[target_id]
-        if target.get("productType") in KEEP_PRODUCT_TYPES:
+        if target.get("productType") in KEEP_PRODUCT_TYPES or target.get("name") in KEPT_EXTENSIONS:
             kept.append(target["name"])
             continue
         drop_deps.append((dep, target["name"]))
@@ -211,6 +220,15 @@ def trim_plan(objects):
     drop_files = [(bf, path) for _, bf, ref, path in embedded_products(objects, app)
                   if ref in dropped_products]
     return app, drop_deps, drop_files, kept
+
+
+def kept_extension_products(objects):
+    """The .appex file names of the extension targets Khala keeps (`KEPT_EXTENSIONS`)."""
+    names = set()
+    for target in objects.values():
+        if target.get("isa") == "PBXNativeTarget" and target.get("name") in KEPT_EXTENSIONS:
+            names.add(objects.get(target.get("productReference"), {}).get("path", ""))
+    return names - {""}
 
 
 def remove_list_item(text, object_id):
@@ -384,7 +402,9 @@ def apply(args):
     (root / OVERRIDES).write_text(
         "// Written by Configuration/Khala/khala_ship.py for a Khala build; git-ignored.\n"
         f"DEVELOPMENT_TEAM = {team}\n"
-        f"BUNDLE_ID_PREFIX = {prefix}\n")
+        f"BUNDLE_ID_PREFIX = {prefix}\n"
+        # Local push (PushProvider): upstream turns it on per team; this is ours.
+        f"ENABLE_PUSH_PROVIDER_{team} = 1\n")
 
     project = root / PBXPROJ
     text = project.read_text()
@@ -426,13 +446,16 @@ def verify(args):
     overrides = (root / OVERRIDES).read_text()
     require(f"DEVELOPMENT_TEAM = {args.team}\n" in overrides and f"BUNDLE_ID_PREFIX = {args.prefix}\n" in overrides,
             "overrides xcconfig does not carry the Khala team/prefix")
+    require(f"ENABLE_PUSH_PROVIDER_{args.team} = 1\n" in overrides, "overrides xcconfig does not enable local push")
 
     objects = load_objects((root / PBXPROJ).read_text())
     app, drop_deps, drop_files, kept = trim_plan(objects)
     require(not drop_deps and not drop_files, "App target still depends on/embeds non-framework targets")
     require("Shared-iOS" in kept, "App target lost its Shared-iOS framework dependency")
+    require(PUSH_TARGET in kept, f"App target no longer builds {PUSH_TARGET} (local push)")
+    allowed = kept_extension_products(objects)
     leftovers = [path for _, _, _, path in embedded_products(objects, app)
-                 if path.endswith((".appex", ".app"))]
+                 if path.endswith((".appex", ".app")) and path not in allowed]
     require(not leftovers, f"App still embeds {leftovers}")
     stray = [f"{entry or holder}: {extra}" for _, holder, entry, _, extra in unsupported_vocabulary(objects, root)]
     require(not stray, f"App still ships Siri vocabulary for intents it does not support (ITMS-90626): {stray}")
@@ -461,7 +484,7 @@ def verify(args):
             require((root / ICON_COMPOSER / "Assets" / layer["image-name"]).is_file(),
                     f"AppIcon.icon layer {layer['image-name']} is missing")
     summary(f"- Khala identity verified: team {args.team}, prefix {args.prefix}, display name {DISPLAY_NAME}, "
-            f"App embeds frameworks only ({', '.join(kept)}), no Siri vocabulary for unsupported intents, "
+            f"App embeds frameworks and {', '.join(KEPT_EXTENSIONS)} only ({', '.join(kept)}), no Siri vocabulary for unsupported intents, "
             "no applinks, no HomeKit entitlement, Khala icon installed.")
 
 
@@ -497,6 +520,8 @@ def write_xcconfig(args):
         style, identity = "Manual", "Apple Distribution"
         profile = "$(KHALA_PROFILE_$(TARGET_NAME:c99extidentifier))"
         lines.append(f"KHALA_PROFILE_{APP_TARGET} = {args.profile}")
+        require(args.push_profile, "manual signing needs the PushProvider profile UUID from prepare")
+        lines.append(f"KHALA_PROFILE_{re.sub(r'[^A-Za-z0-9_]', '_', PUSH_TARGET)} = {args.push_profile}")
     for key, value in (("CODE_SIGN_STYLE", style), ("CODE_SIGN_IDENTITY", identity),
                        ("PROVISIONING_PROFILE_SPECIFIER", profile)):
         lines += [f"{key} = {value}", f"{key}[sdk=iphoneos*] = {value}"]
@@ -510,9 +535,11 @@ def export_options(args):
     if args.mode == "cloud":
         options["signingStyle"] = "automatic"
     else:
-        require(args.profile and args.bundle_id, "manual export needs the bundle id and profile UUID")
+        require(args.profile and args.bundle_id and args.push_profile,
+                "manual export needs the bundle id and both profile UUIDs")
         options.update(signingStyle="manual", signingCertificate="Apple Distribution",
-                       provisioningProfiles={args.bundle_id: args.profile})
+                       provisioningProfiles={args.bundle_id: args.profile,
+                                             args.bundle_id + KEPT_EXTENSIONS[PUSH_TARGET]: args.push_profile})
     with open(args.out, "wb") as out:
         plistlib.dump(options, out)
 
@@ -679,16 +706,19 @@ CAPABILITY_FOR = {
     "com.apple.developer.usernotifications.communication": "USERNOTIFICATIONS_COMMUNICATION",
     "com.apple.developer.usernotifications.time-sensitive": "USERNOTIFICATIONS_TIMESENSITIVE",
     "com.apple.security.application-groups": "APP_GROUPS",
+    NETWORK_EXTENSION: "NETWORK_EXTENSIONS",
     "keychain-access-groups": None,
 }
 
 
-def requested_entitlements(prefix):
-    """The App target's entitlements as `apply` left them, with the app group resolved."""
-    with (ROOT / ENTITLEMENTS).open("rb") as source:
+def requested_entitlements(prefix, path=ENTITLEMENTS):
+    """A target's entitlements as `apply` left them, with the app group resolved, plus the local-push
+    Network Extension entitlement the build script adds to every target (`ENABLE_PUSH_PROVIDER`)."""
+    with (ROOT / path).open("rb") as source:
         entitlements = plistlib.load(source)
     unknown = sorted(set(entitlements) - set(CAPABILITY_FOR))
-    require(not unknown, f"App entitlements gained {unknown}: map them in khala_ship.py CAPABILITY_FOR")
+    require(not unknown, f"{path} gained {unknown}: map them in khala_ship.py CAPABILITY_FOR")
+    entitlements[NETWORK_EXTENSION] = [APP_PUSH_PROVIDER]
     groups = [g.replace("$(BUNDLE_ID_PREFIX)", prefix).replace("$(BUNDLE_ID_SUFFIX)", "")
               for g in entitlements.get("com.apple.security.application-groups", [])]
     return entitlements, groups
@@ -704,13 +734,15 @@ def profile_gaps(provision, entitlements, groups):
     granted = provision.get("Entitlements", {})
     missing = [key for key, capability in CAPABILITY_FOR.items()
                if capability and key in entitlements and key not in granted]
+    if NETWORK_EXTENSION in entitlements and NETWORK_EXTENSION in granted \
+            and APP_PUSH_PROVIDER not in granted[NETWORK_EXTENSION]:
+        missing.append(NETWORK_EXTENSION)
     missing_groups = [g for g in groups if g not in granted.get("com.apple.security.application-groups", [])]
     return missing, missing_groups
 
 
 def manual_signing(apple, env, bundle, bundles, read_only, now):
     prefix = env.get("BUNDLE_ID_PREFIX") or bundle.rsplit(".", 1)[0]
-    entitlements, groups = requested_entitlements(prefix)
     der = p12_certificate_der(env)
     certs = apple.all("/v1/certificates?limit=200&filter[certificateType]=DISTRIBUTION,IOS_DISTRIBUTION"
                       "&fields[certificates]=certificateContent,expirationDate,certificateType")["data"]
@@ -721,65 +753,93 @@ def manual_signing(apple, env, bundle, bundles, read_only, now):
     summary(f"- Distribution certificate {cert['id']} ({cert['attributes']['certificateType']}) matches the P12.")
 
     if not bundles:  # registered moments ago by asc()
-        query = urllib.parse.urlencode({"filter[identifier]": bundle, "fields[bundleIds]": "identifier"})
-        bundles = [b for b in apple.call(f"/v1/bundleIds?{query}")["data"] if b["attributes"]["identifier"] == bundle]
-    bundle_id = bundles[0]["id"]
+        bundles = find_bundles(apple, bundle)
+    app = sign_target(apple, cert, bundle, bundles[0]["id"], ENTITLEMENTS, PROFILE_NAME, prefix, read_only, now)
+
+    push_bundle = bundle + KEPT_EXTENSIONS[PUSH_TARGET]
+    push_bundles = find_bundles(apple, push_bundle)
+    if not push_bundles:
+        require(not read_only, f"bundle ID {push_bundle} is not registered; a build run registers it")
+        apple.call("/v1/bundleIds", "POST", {"data": {"type": "bundleIds", "attributes": {
+            "identifier": push_bundle, "name": f"{DISPLAY_NAME} PushProvider", "platform": "IOS"}}})
+        summary(f"- Registered bundle ID {push_bundle} (local push).")
+        push_bundles = find_bundles(apple, push_bundle)
+    push = sign_target(apple, cert, push_bundle, push_bundles[0]["id"], EXTENSION_ENTITLEMENTS, PUSH_PROFILE_NAME,
+                       prefix, read_only, now)
+    emit("profile_uuid", app["attributes"]["uuid"])
+    emit("profile_b64", app["attributes"]["profileContent"])
+    emit("push_profile_uuid", push["attributes"]["uuid"])
+    emit("push_profile_b64", push["attributes"]["profileContent"])
+
+
+PUSH_PROFILE_NAME = "Khala PushProvider App Store CI"
+
+
+def find_bundles(apple, identifier):
+    query = urllib.parse.urlencode({"filter[identifier]": identifier, "fields[bundleIds]": "identifier"})
+    return [b for b in apple.call(f"/v1/bundleIds?{query}")["data"] if b["attributes"]["identifier"] == identifier]
+
+
+def sign_target(apple, cert, bundle, bundle_id, entitlements_path, profile_name, prefix, read_only, now):
+    """Enable the App ID capabilities `entitlements_path` needs and return our own current App Store profile
+    for `bundle` (created or recreated when missing or short of an entitlement)."""
+    entitlements, groups = requested_entitlements(prefix, entitlements_path)
     app_id = apple.call(f"/v1/bundleIds/{bundle_id}?include=bundleIdCapabilities")
     have = {c["attributes"].get("capabilityType") for c in app_id.get("included", [])
             if c.get("type") == "bundleIdCapabilities"}
-    summary(f"- App ID capabilities on: {', '.join(sorted(have)) or 'none'}.")
+    summary(f"- {bundle}: App ID capabilities on: {', '.join(sorted(have)) or 'none'}.")
     wanted = sorted({CAPABILITY_FOR[k] for k in entitlements if CAPABILITY_FOR.get(k)})
     for capability in [c for c in wanted if c not in have]:
         if read_only:
-            summary(f"- App ID capability {capability} is off (a build run enables it).")
+            summary(f"- {bundle}: App ID capability {capability} is off (a build run enables it).")
             continue
         result = apple.call("/v1/bundleIdCapabilities", "POST", {"data": {
             "type": "bundleIdCapabilities", "attributes": {"capabilityType": capability},
             "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": bundle_id}}}}}, soft=True)
         if "_status" in result:
-            summary(f"- Could not enable {capability} on the App ID (HTTP {result['_status']}: "
+            summary(f"- {bundle}: could not enable {capability} on the App ID (HTTP {result['_status']}: "
                     f"{'; '.join(result['_errors'])}).")
         else:
-            summary(f"- Enabled App ID capability {capability}.")
+            summary(f"- {bundle}: enabled App ID capability {capability}.")
 
     # Our own CI profile only (by name); a person's profiles are never touched.
     profiles = apple.all("/v1/profiles?limit=200&filter[profileType]=IOS_APP_STORE"
-                         f"&filter[name]={urllib.parse.quote(PROFILE_NAME)}&include=bundleId,certificates"
+                         f"&filter[name]={urllib.parse.quote(profile_name)}&include=bundleId,certificates"
                          "&fields[profiles]=name,profileState,expirationDate,bundleId,certificates,profileContent,uuid"
                          "&fields[bundleIds]=identifier&fields[certificates]=name")
-    ours = [p for p in profiles["data"] if p["attributes"]["name"] == PROFILE_NAME]
+    ours = [p for p in profiles["data"] if p["attributes"]["name"] == profile_name]
     profile = next(iter(usable_profiles({**profiles, "data": ours}, bundle, cert["id"], now)), None)
     if profile is not None:
         missing, missing_groups = profile_gaps(profile_entitlements(profile["attributes"]["profileContent"]),
                                                entitlements, groups)
         if missing or missing_groups:
-            summary(f"- Profile \"{PROFILE_NAME}\" lacks {missing + missing_groups}; recreating it.")
+            summary(f"- Profile \"{profile_name}\" lacks {missing + missing_groups}; recreating it.")
             profile = None
     if profile is None:
-        require(not read_only, f"no current \"{PROFILE_NAME}\" profile; a build run (not preflight_only) creates it")
+        require(not read_only, f"no current \"{profile_name}\" profile; a build run (not preflight_only) creates it")
         for stale in ours:
             apple.call(f"/v1/profiles/{stale['id']}", "DELETE")
         profile = apple.call("/v1/profiles", "POST", {"data": {
-            "type": "profiles", "attributes": {"name": PROFILE_NAME, "profileType": "IOS_APP_STORE"},
+            "type": "profiles", "attributes": {"name": profile_name, "profileType": "IOS_APP_STORE"},
             "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": bundle_id}},
                               "certificates": {"data": [{"type": "certificates", "id": cert["id"]}]}}}})["data"]
-        summary(f"- Created App Store profile \"{PROFILE_NAME}\" ({profile['attributes']['uuid']}).")
+        summary(f"- Created App Store profile \"{profile_name}\" ({profile['attributes']['uuid']}).")
     content = profile["attributes"]["profileContent"]
     missing, missing_groups = profile_gaps(profile_entitlements(content), entitlements, groups)
     steps = []
     if missing_groups:
         steps.append(f"the app group {', '.join(missing_groups)} (the App Store Connect API cannot create or assign "
-                     "app groups): Identifiers > + > App Groups > register it; then Identifiers > "
+                     "app groups): Identifiers > + > App Groups > register it if needed; then Identifiers > "
                      f"{bundle} > App Groups > Configure > tick it > Save")
     if missing:
         steps.append(f"entitlements {missing}: on Identifiers > {bundle}, tick the matching capabilities "
-                     f"({', '.join(sorted({CAPABILITY_FOR[k] for k in missing}))}) > Save")
-    require(not steps, "the App Store profile lacks " + "; and ".join(steps) + ". Once, in Certificates, "
-            "Identifiers & Profiles; then dispatch again (the profile is recreated automatically).")
-    emit("profile_uuid", profile["attributes"]["uuid"])
-    emit("profile_b64", content)
-    summary(f"- App Store profile \"{PROFILE_NAME}\" ({profile['attributes']['uuid']}) covers every App "
-            f"entitlement, app group {', '.join(groups)} included.")
+                     f"({', '.join(sorted({CAPABILITY_FOR[k] for k in missing}))}"
+                     f"{'; Network Extensions needs App Push Provider' if NETWORK_EXTENSION in missing else ''}) > Save")
+    require(not steps, f"the App Store profile for {bundle} lacks " + "; and ".join(steps) + ". Once, in "
+            "Certificates, Identifiers & Profiles; then dispatch again (the profile is recreated automatically).")
+    summary(f"- App Store profile \"{profile_name}\" ({profile['attributes']['uuid']}) covers every {bundle} "
+            f"entitlement, app group {', '.join(groups)} and local push included.")
+    return profile
 
 
 def bootstrap_certificate(args):
@@ -871,13 +931,18 @@ def linked_frameworks(binary):
     return names
 
 
+KEPT_APPEX = {"HomeAssistant-Extensions-PushProvider.appex"}
+
+
 def store_checks(ipa, app, names, info):
     """App Store processing rejections our target trim could cause, checked from the IPA alone.
     Returns (problems, what was checked)."""
     problems = []
-    # Extensions/watch: none may remain, and the App must not claim to be one.
+    # Extensions/watch: only the kept extensions (local push) may remain, and the App must not claim to be one.
     leftovers = sorted({n[len(app):].split("/", 1)[0] for n in names if n.startswith(app) and
-                        n[len(app):].split("/", 1)[0] in ("PlugIns", "Extensions", "Watch", "AppClips")})
+                        n[len(app):].split("/", 1)[0] in ("Extensions", "Watch", "AppClips")})
+    plugins = sorted({n[len(app + "PlugIns/"):].split("/", 1)[0] for n in names if n.startswith(app + "PlugIns/")})
+    leftovers += [f"PlugIns/{p}" for p in plugins if p not in KEPT_APPEX]
     if leftovers:
         problems.append(f"bundle still contains {leftovers}")
     stray = sorted(k for k in info if k.startswith("NSExtension") or k in WATCH_KEYS)
@@ -969,7 +1034,13 @@ def verify_ipa(args):
         require(len(apps) == 1, f"expected one app in the IPA, found {apps}")
         app = f"Payload/{apps[0]}/"
         info = plistlib.loads(ipa.read(app + "Info.plist"))
-        nested = [n for n in names if n.startswith(app) and (n.startswith(app + "PlugIns/") or n.startswith(app + "Watch/"))]
+        nested = [n for n in names if n.startswith(app + "Watch/") or (n.startswith(app + "PlugIns/") and
+                  n[len(app + "PlugIns/"):].split("/", 1)[0] not in KEPT_APPEX)]
+        push_dir = app + "PlugIns/" + next(iter(KEPT_APPEX)) + "/"
+        require(push_dir + "Info.plist" in names, "packaged app lacks the PushProvider extension (local push)")
+        push_info = plistlib.loads(ipa.read(push_dir + "Info.plist"))
+        push_profile = ipa.read(push_dir + "embedded.mobileprovision")
+        push_signed = signed_entitlements(ipa.read(push_dir + push_info.get("CFBundleExecutable", "")))
         profile = ipa.read(app + "embedded.mobileprovision")
         signed = signed_entitlements(ipa.read(app + info.get("CFBundleExecutable", "")))
         problems, checked = store_checks(ipa, app, names, info)
@@ -979,7 +1050,17 @@ def verify_ipa(args):
                 "CFBundleVersion": args.build, "CFBundleDisplayName": DISPLAY_NAME}
     for key, value in expected.items():
         require(info.get(key) == value, f"packaged app: {key} is {info.get(key)!r}, expected {value!r}")
-    require(not nested, "packaged app still contains extensions or a watch app")
+    require(not nested, "packaged app still contains extensions (other than local push) or a watch app")
+    push_bundle = args.bundle_id + KEPT_EXTENSIONS[PUSH_TARGET]
+    require(push_info.get("CFBundleIdentifier") == push_bundle,
+            f"PushProvider bundle id is {push_info.get('CFBundleIdentifier')!r}, expected {push_bundle!r}")
+    push_match = re.search(rb"<\?xml.*?</plist>", push_profile, re.S)
+    require(push_match is not None, "the PushProvider's embedded.mobileprovision carries no readable plist")
+    require(plistlib.loads(push_match.group(0)).get("Entitlements", {}).get("application-identifier")
+            == f"{args.team}.{push_bundle}", "the PushProvider's profile is for a different app or team")
+    for label, blobs in (("App", signed), ("PushProvider", push_signed)):
+        require(any(APP_PUSH_PROVIDER in e.get(NETWORK_EXTENSION, []) for e in blobs),
+                f"{label} is not signed with the {APP_PUSH_PROVIDER} Network Extension entitlement (local push)")
     match = re.search(rb"<\?xml.*?</plist>", profile, re.S)
     require(match is not None, "embedded.mobileprovision carries no readable plist")
     provision = plistlib.loads(match.group(0))
@@ -992,7 +1073,8 @@ def verify_ipa(args):
     for key in DROPPED_ENTITLEMENTS:
         require(all(key not in e for e in signed), f"packaged app is signed with {key}, which Khala drops")
     summary(f"- Packaged IPA verified: {args.bundle_id} {args.version} ({args.build}), display name "
-            f"{DISPLAY_NAME}, no extensions, App Store profile \"{provision.get('Name')}\".")
+            f"{DISPLAY_NAME}, only the local-push extension, App Store profile \"{provision.get('Name')}\"; "
+            f"{push_bundle} signed for {APP_PUSH_PROVIDER}.")
     summary(f"- App Store processing guards passed: {checked}.")
 
 
@@ -1186,11 +1268,13 @@ def main():
     for flag in ("--mode", "--team", "--version", "--build", "--out"):
         command.add_argument(flag, required=True)
     command.add_argument("--profile", default="")
+    command.add_argument("--push-profile", default="")
     command = commands.add_parser("export-options")
     for flag in ("--mode", "--team", "--out"):
         command.add_argument(flag, required=True)
     command.add_argument("--bundle-id", default="")
     command.add_argument("--profile", default="")
+    command.add_argument("--push-profile", default="")
     command = commands.add_parser("asc")
     command.add_argument("--mode", choices=("cloud", "manual", "unsigned"), required=True)
     command.add_argument("--bundle-id", required=True)
