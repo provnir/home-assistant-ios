@@ -51,7 +51,10 @@ public enum AppConstants {
     }
 
     public enum Firebase {
-        public static let pushURLString = "https://mobile-apps.home-assistant.io/api/sendPushNotification"
+        /// Khala: a build with its own push relay (`KhalaPushRelayURL` in Info.plist, written by khala_ship.py) registers
+        /// that instead; Home Assistant's relay only delivers to the official app's bundle id.
+        public static let pushURLString = Bundle.main.object(forInfoDictionaryKey: "KhalaPushRelayURL") as? String
+            ?? "https://mobile-apps.home-assistant.io/api/sendPushNotification"
     }
 
     /// Home Assistant Blue

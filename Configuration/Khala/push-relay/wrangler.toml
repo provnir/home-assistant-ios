@@ -1,0 +1,14 @@
+# Khala push relay. Deploy: npx wrangler deploy (from this folder), then set the secrets once:
+#   npx wrangler secret put APNS_KEY_P8     (the team's .p8 APNs auth key, PEM)
+#   npx wrangler secret put RELAY_SECRET    (random, >=16 chars of [A-Za-z0-9_-]; also in the URL below)
+# The app gets https://<worker host>/<RELAY_SECRET>/sendPushNotification through the GitHub secret
+# KHALA_PUSH_RELAY_URL (khala_ship.py apply writes it into Info.plist as KhalaPushRelayURL).
+name = "khala-push-relay"
+main = "worker.js"
+compatibility_date = "2026-11-01"
+workers_dev = true
+
+[vars]
+APNS_KEY_ID = "W6UP3S5X58"
+APNS_TEAM_ID = "5Y9SY6ZGNF"
+BUNDLE_ID = "il.co.provizor.khala.HomeAssistant"

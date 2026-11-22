@@ -216,6 +216,8 @@ jobs:
         id: build
         env:
           SPM_DIR: ${{ runner.temp }}/SourcePackages
+          # Khala's own push relay URL (it carries a secret path); empty = the app keeps Firebase.
+          KHALA_PUSH_RELAY_URL: ${{ secrets.KHALA_PUSH_RELAY_URL }}
           SPM_CACHE_HIT: ${{ steps.spm.outputs.cache-hit }}
           SPM_CACHE_MATCHED_KEY: ${{ steps.spm.outputs.cache-matched-key }}
           APP_STORE_CONNECT_KEY_ID: ${{ vars.APP_STORE_CONNECT_KEY_ID }}

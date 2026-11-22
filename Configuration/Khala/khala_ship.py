@@ -70,6 +70,7 @@ HOMEKIT = "com.apple.developer.homekit"
 DROPPED_ENTITLEMENTS = (ASSOCIATED_DOMAINS, HOMEKIT)
 # Shared now imports HomeKit, so the binaries link it and App Store processing may ask for its purpose
 # string (ITMS-90683). Upstream ships none; an unused one is harmless.
+PUSH_RELAY_KEY = "KhalaPushRelayURL"
 HOMEKIT_PURPOSE = "NSHomeKitUsageDescription"
 HOMEKIT_PURPOSE_TEXT = "Add Matter devices from Home Assistant to the Home app."
 
@@ -412,6 +413,16 @@ def apply(args):
         info = plistlib.load(source)
     info["CFBundleDisplayName"] = DISPLAY_NAME
     info["CFBundleName"] = DISPLAY_NAME
+    # Khala's own push relay (Configuration/Khala/push-relay): its URL carries a secret path, so it comes from the
+    # KHALA_PUSH_RELAY_URL secret at build time and never from the repository. Without it the app uses Firebase.
+    relay = os.environ.get("KHALA_PUSH_RELAY_URL", "").strip()
+    if relay:
+        require(re.fullmatch(r"https://[A-Za-z0-9.-]+/[A-Za-z0-9_-]{16,}/sendPushNotification", relay),
+                "KHALA_PUSH_RELAY_URL must be https://<host>/<secret>/sendPushNotification")
+        info[PUSH_RELAY_KEY] = relay
+        print("- App registers Khala's own push relay (KhalaPushRelayURL)")
+    else:
+        info.pop(PUSH_RELAY_KEY, None)
     info.setdefault(HOMEKIT_PURPOSE, HOMEKIT_PURPOSE_TEXT)
     with info_path.open("wb") as out:
         plistlib.dump(info, out, sort_keys=False)

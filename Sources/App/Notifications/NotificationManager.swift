@@ -177,7 +177,11 @@ class NotificationManager: NSObject, LocalPushManagerDelegate {
     }
 
     func resetPushID() -> Promise<String> {
-        firstly {
+        // Khala: with its own relay the push id is the APNs device token, which only iOS can change.
+        if KhalaPushRelay.isEnabled, let pushID = Current.settingsStore.pushID {
+            return .value(pushID)
+        }
+        return firstly {
             Promise<Void> { seal in
                 Messaging.messaging().deleteToken(completion: seal.resolve)
             }
@@ -214,6 +218,22 @@ class NotificationManager: NSObject, LocalPushManagerDelegate {
         }
 
         Messaging.messaging().setAPNSToken(deviceToken, type: tokenType)
+
+        // Khala: its relay sends straight to APNs, so the device token itself is the push id Home Assistant gets.
+        if KhalaPushRelay.isEnabled {
+            updatePushID(apnsToken)
+        }
+    }
+
+    private func updatePushID(_ pushID: String) {
+        guard Current.settingsStore.pushID != pushID else { return }
+        Current.Log.info("Push id is now the APNs token \(LogRedaction.redactToken(pushID))")
+        Current.settingsStore.pushID = pushID
+        Current.backgroundTask(withName: BackgroundTask.notificationManagerDidReceiveRegistrationToken.rawValue) { _ in
+            when(fulfilled: Current.apis.map { api in
+                api.updateRegistration()
+            })
+        }.cauterize()
     }
 
     func didReceiveRemoteNotification(
@@ -624,6 +644,8 @@ extension NotificationManager: UNUserNotificationCenterDelegate {
 
 extension NotificationManager: MessagingDelegate {
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        // Khala: Firebase tokens are for Home Assistant's relay, which Khala does not use.
+        guard !KhalaPushRelay.isEnabled else { return }
         let currentToken = Current.settingsStore.pushID
         let loggableCurrent = currentToken.map { LogRedaction.redactToken($0) } ?? "(null)"
         let loggableNew = fcmToken.map { LogRedaction.redactToken($0) } ?? "(null)"
