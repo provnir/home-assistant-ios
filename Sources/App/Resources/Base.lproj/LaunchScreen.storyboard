@@ -24,14 +24,14 @@
                                     <constraint firstAttribute="height" constant="115" id="y4R-Bz-WCE"/>
                                 </constraints>
                             </imageView>
-                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="ohf-inline" translatesAutoresizingMaskIntoConstraints="NO" id="pDB-na-0R2">
+                            <imageView hidden="YES" clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="ohf-inline" translatesAutoresizingMaskIntoConstraints="NO" id="pDB-na-0R2">
                                 <rect key="frame" x="97" y="771" width="220" height="25"/>
                                 <constraints>
                                     <constraint firstAttribute="width" constant="220" id="OLs-dw-fyH"/>
                                     <constraint firstAttribute="height" constant="25" id="vTX-2e-0yP"/>
                                 </constraints>
                             </imageView>
-                            <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="A PROJECT FROM THE" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="9Kv-2m-Wq7">
+                            <label hidden="YES" opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="A PROJECT FROM THE" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="9Kv-2m-Wq7">
                                 <rect key="frame" x="135" y="755" width="144" height="16"/>
                                 <fontDescription key="fontDescription" type="system" weight="semibold" pointSize="13"/>
                                 <color key="textColor" systemColor="secondaryLabelColor"/>

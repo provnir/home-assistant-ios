@@ -2,16 +2,13 @@ import Foundation
 
 /// Home Assistant's settings as the Settings screen offers them: the frontend's own settings dashboard
 /// (home-assistant/frontend 20260930.4, `src/panels/config/config-sections.ts`: `dashboard`, `dashboard_2`,
-/// `dashboard_3`, with Home Assistant Cloud first as `ha-config-dashboard.ts` `_pages` adds it) in the same
-/// order, each with the pages under it (its tabs, or the pages its navigation lists), filtered by what the
-/// server has (`KhalaServerRequirement`). The companion-app entry (`#external-app-configuration`) is left out:
-/// the app's own settings are the screen's THIS APP section. Titles are the frontend's English ones.
+/// `dashboard_3`) in the same order, each with the pages under it (its tabs, or the pages its navigation lists),
+/// filtered by what the server has (`KhalaServerRequirement`). Two of the frontend's entries are left out: the
+/// companion-app one (`#external-app-configuration`), since the app's own settings are the screen's THIS APP
+/// section, and Home Assistant Cloud (`/config/cloud`, which `ha-config-dashboard.ts` `_pages` puts first),
+/// since Khala doesn't offer Nabu Casa's subscription. Titles are the frontend's English ones.
 enum KhalaSettingsCatalog {
     static let sections: [KhalaServerSection] = [
-        KhalaServerSection(
-            id: "cloud", title: "Home Assistant Cloud", path: "/config/cloud", glyph: .cloud,
-            requirement: .component("cloud"), keywords: ["Nabu Casa", "remote"]
-        ),
         KhalaServerSection(
             id: "devices", title: "Devices & services", path: "/config/integrations", glyph: .devices,
             requirement: .core,

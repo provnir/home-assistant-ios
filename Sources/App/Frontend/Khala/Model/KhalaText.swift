@@ -55,6 +55,29 @@ enum KhalaText {
     static let serverSettingsUnavailable = "Home Assistant's settings need an administrator account."
     static let more = "More"
 
+    /// The About screen (`AboutView`).
+    enum About {
+        static let appName = "Khala"
+        static let summary = """
+        Khala is a personal fork of the Home Assistant Companion app for iOS, with its own native screens on top \
+        of your Home Assistant server. It is not made or supported by Home Assistant or the Open Home Foundation.
+        """
+        static let khalaSection = "Khala"
+        static let sourceCode = "Source code"
+        static let sourceURL = URL(string: "https://github.com/provnir/home-assistant-ios/tree/khala")!
+        static let builtOnSection = "Built on"
+        static let builtOnFooter = "Home Assistant and its Companion app are open source under the Apache License 2.0."
+        static let companionApp = "Home Assistant Companion for iOS"
+        static let companionURL = URL(string: "https://github.com/home-assistant/iOS")!
+        static let homeAssistant = "Home Assistant"
+        static let companionDocs = "Companion app documentation"
+
+        /// The header's second line: "Version 2026.11.0 (57)".
+        static func version(_ description: String) -> String {
+            "Version \(description)"
+        }
+    }
+
     /// "1 update", "3 updates".
     static func updates(_ count: Int) -> String {
         count == 1 ? "1 update" : "\(count) updates"

@@ -5,7 +5,6 @@ import SFSafeSymbols
 enum KhalaSettingsSymbols {
     static func symbol(_ glyph: KhalaSettingsGlyph) -> SFSymbol {
         switch glyph {
-        case .cloud: return .icloud
         case .devices: return .powerplug
         case .automations: return .gearshape2
         case .areas: return .house
