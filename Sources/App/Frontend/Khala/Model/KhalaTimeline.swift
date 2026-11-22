@@ -31,6 +31,7 @@ struct KhalaTimeline: Equatable {
     static func build(
         entities: [KhalaEntity],
         devices: [KhalaDevice],
+        nowChoices: [KhalaAccent: String] = [:],
         automationConfigs: [String: [String: Any]],
         now: Date,
         calendar: Calendar
@@ -121,7 +122,7 @@ struct KhalaTimeline: Equatable {
             items: items,
             headline: headline(entities: entities, sun: sun, now: now),
             summary: allDetections.isEmpty ? KhalaText.allClear : KhalaText.detections(allDetections.count),
-            chips: KhalaDeviceCatalog.nowChips(from: devices)
+            chips: KhalaDeviceCatalog.nowChips(from: devices, choices: nowChoices)
         )
     }
 

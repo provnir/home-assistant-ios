@@ -15,6 +15,8 @@ final class KhalaHomeViewModel: ObservableObject {
     @Published private(set) var automationCount = 0
     @Published private(set) var userName: String?
     @Published private(set) var assignments: [KhalaRoleAssignment]
+    /// The Now card's "which one" choice per category (two cars: which one shows), from the chip's "Show here" menu.
+    @Published private(set) var nowChoices: [KhalaAccent: String]
     @Published private(set) var now: Date
     /// Display names of every entity with a state, for the device settings list.
     @Published private(set) var entityNames: [String: String] = [:]
@@ -48,11 +50,18 @@ final class KhalaHomeViewModel: ObservableObject {
     private var tokens: [HACancellable] = []
     private var clock: AnyCancellable?
     private let assignmentStore: KhalaRoleAssignmentStore
+    private let nowChoiceStore: KhalaNowChoiceStore
 
-    init(server: Server, assignmentStore: KhalaRoleAssignmentStore = KhalaRoleAssignmentStore(defaults: prefs)) {
+    init(
+        server: Server,
+        assignmentStore: KhalaRoleAssignmentStore = KhalaRoleAssignmentStore(defaults: prefs),
+        nowChoiceStore: KhalaNowChoiceStore = KhalaNowChoiceStore(defaults: prefs)
+    ) {
         self.server = server
         self.assignmentStore = assignmentStore
+        self.nowChoiceStore = nowChoiceStore
         self.assignments = assignmentStore.load(serverId: server.identifier.rawValue)
+        self.nowChoices = nowChoiceStore.load(serverId: server.identifier.rawValue)
         self.now = Current.date()
         if KhalaHints.builtIn.entries.isEmpty {
             Current.Log.error("Khala: \(KhalaHints.resourceName).json is missing or unreadable; cars and water heaters fall back to generic screens")
@@ -106,6 +115,15 @@ final class KhalaHomeViewModel: ObservableObject {
     func setAssignments(_ newValue: [KhalaRoleAssignment]) {
         assignments = newValue
         assignmentStore.save(newValue, serverId: server.identifier.rawValue)
+        rebuild()
+    }
+
+    // MARK: - Now card choices
+
+    /// Shows `deviceId` on the Now card for `category`; nil goes back to choosing automatically.
+    func setNowChoice(_ deviceId: String?, for category: KhalaAccent) {
+        nowChoices[category] = deviceId
+        nowChoiceStore.save(nowChoices, serverId: server.identifier.rawValue)
         rebuild()
     }
 
@@ -167,6 +185,7 @@ final class KhalaHomeViewModel: ObservableObject {
         let newTimeline = KhalaTimeline.build(
             entities: entities,
             devices: newDevices,
+            nowChoices: nowChoices,
             automationConfigs: automationConfigs,
             now: date,
             calendar: calendar

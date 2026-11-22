@@ -83,19 +83,33 @@ enum KhalaDeviceCatalog {
         return pinned + detected
     }
 
-    /// Up to `limit` devices for the Now card: everything pinned first, then the first device of each category in
+    /// Up to `limit` devices for the Now card: everything pinned first, then one device of each category in
     /// `KhalaAccent.chipPriority` order, then whatever is left, so the card shows variety before repetition.
-    static func nowChips(from devices: [KhalaDevice], limit: Int = 3) -> [KhalaDevice] {
+    /// A category's device is the one the user chose for it (`choices`, from the chip's "Show here" menu) while that
+    /// device still exists, otherwise the first one detection lists.
+    static func nowChips(
+        from devices: [KhalaDevice],
+        choices: [KhalaAccent: String] = [:],
+        limit: Int = 3
+    ) -> [KhalaDevice] {
         var chips = Array(devices.filter(\.isPinned).prefix(limit))
         for category in KhalaAccent.chipPriority where chips.count < limit {
-            guard !chips.contains(where: { $0.accent == category }),
-                  let device = devices.first(where: { $0.accent == category && !$0.isPinned }) else { continue }
+            guard !chips.contains(where: { $0.accent == category }) else { continue }
+            let candidates = nowAlternatives(for: category, in: devices)
+            let chosen = choices[category].flatMap { id in candidates.first { $0.id == id } }
+            guard let device = chosen ?? candidates.first else { continue }
             chips.append(device)
         }
         for device in devices where chips.count < limit && !chips.contains(device) {
             chips.append(device)
         }
         return chips
+    }
+
+    /// The devices a Now chip of `category` can show: the detected (unpinned) ones of that colour family, in list
+    /// order. More than one means the chip offers a "Show here" choice.
+    static func nowAlternatives(for category: KhalaAccent, in devices: [KhalaDevice]) -> [KhalaDevice] {
+        devices.filter { $0.accent == category && !$0.isPinned }
     }
 
     /// The category of every entity that belongs to a listed device, for colouring automations by what they act on.

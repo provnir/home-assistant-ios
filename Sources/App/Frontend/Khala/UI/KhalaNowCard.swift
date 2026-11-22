@@ -1,10 +1,17 @@
 import SwiftUI
 
-/// The card at "Now": one line of conditions and up to three tinted device chips.
+/// The card at "Now": one line of conditions and up to three tinted device chips. A chip whose category has more
+/// than one device (two cars) offers the others on a long press ("Show here"), and the choice is remembered.
 struct KhalaNowCard: View {
     let headline: String
     let chips: [KhalaDevice]
     let onDevice: (KhalaDevice) -> Void
+    /// The devices a chip could show instead, its own included; one or none means no menu.
+    var alternatives: (KhalaDevice) -> [KhalaDevice] = { _ in [] }
+    /// The user picked a device for a category (nil: choose automatically again).
+    var onChoose: (KhalaAccent, String?) -> Void = { _, _ in }
+    /// Whether the category already has a stored choice, so the menu can offer to clear it.
+    var hasChoice: (KhalaAccent) -> Bool = { _ in false }
 
     var body: some View {
         let shown = Array(chips.prefix(3))
@@ -16,7 +23,7 @@ struct KhalaNowCard: View {
             if !shown.isEmpty {
                 HStack(spacing: 8) {
                     ForEach(shown) { device in
-                        KhalaDeviceChip(device: device) { onDevice(device) }
+                        chip(device)
                     }
                     // Keep three equal columns when fewer devices are known.
                     ForEach(shown.count ..< 3, id: \.self) { _ in
@@ -31,6 +38,35 @@ struct KhalaNowCard: View {
         .khalaCardShadow(lifted: true)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(KhalaText.rightNow)
+    }
+
+    @ViewBuilder
+    private func chip(_ device: KhalaDevice) -> some View {
+        let others = device.isPinned ? [] : alternatives(device)
+        if others.count > 1 {
+            KhalaDeviceChip(device: device) { onDevice(device) }
+                .contextMenu {
+                    Section(KhalaText.showHere) {
+                        ForEach(others) { other in
+                            Button {
+                                onChoose(device.accent, other.id)
+                            } label: {
+                                if other.id == device.id {
+                                    Label(other.name, systemImage: "checkmark")
+                                } else {
+                                    Text(other.name)
+                                }
+                            }
+                        }
+                    }
+                    if hasChoice(device.accent) {
+                        Button(KhalaText.chooseAutomatically) { onChoose(device.accent, nil) }
+                    }
+                }
+                .accessibilityHint(KhalaText.showHereHint)
+        } else {
+            KhalaDeviceChip(device: device) { onDevice(device) }
+        }
     }
 }
 

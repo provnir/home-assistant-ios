@@ -13,6 +13,10 @@ struct KhalaTodayView: View {
     let onSearch: () -> Void
     let onItem: (KhalaTimelineItem) -> Void
     let onDevice: (KhalaDevice) -> Void
+    /// The Now card's "Show here" choice (see `KhalaNowCard`).
+    var nowAlternatives: (KhalaDevice) -> [KhalaDevice] = { _ in [] }
+    var onNowChoice: (KhalaAccent, String?) -> Void = { _, _ in }
+    var hasNowChoice: (KhalaAccent) -> Bool = { _ in false }
     /// Bumped by the shell when Today is chosen again in the drawer: back to Now.
     var scrollRequest = 0
 
@@ -87,7 +91,14 @@ struct KhalaTodayView: View {
                                 lineAbove: lineAbove,
                                 lineBelow: lineBelow
                             ) {
-                                KhalaNowCard(headline: timeline.headline, chips: timeline.chips, onDevice: onDevice)
+                                KhalaNowCard(
+                                    headline: timeline.headline,
+                                    chips: timeline.chips,
+                                    onDevice: onDevice,
+                                    alternatives: nowAlternatives,
+                                    onChoose: onNowChoice,
+                                    hasChoice: hasNowChoice
+                                )
                             }
                         case .detection:
                             KhalaTimelineRow(

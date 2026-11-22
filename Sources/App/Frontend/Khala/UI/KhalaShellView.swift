@@ -313,6 +313,9 @@ struct KhalaShellView: View {
                 },
                 onItem: { handle($0) },
                 onDevice: { device in shell.route(KhalaRouting.target(for: device, cameras: home.cameras)) },
+                nowAlternatives: { KhalaDeviceCatalog.nowAlternatives(for: $0.accent, in: home.devices) },
+                onNowChoice: { category, deviceId in home.setNowChoice(deviceId, for: category) },
+                hasNowChoice: { home.nowChoices[$0] != nil },
                 scrollRequest: shell.nowScrollRequest
             )
         case .cameras:

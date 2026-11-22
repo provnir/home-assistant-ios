@@ -34,6 +34,9 @@ enum KhalaText {
     /// The menu section of devices with no Home Assistant area.
     static let otherDevices = "Other"
     static let pinnedDevices = "Pinned devices"
+    static let showHere = "Show here"
+    static let showHereHint = "Touch and hold to choose which one shows here."
+    static let chooseAutomatically = "Choose automatically"
     static let pinnedDevicesFooter = """
     Pinned devices come first in the menu and on the Now card. The role picks the colour and a starting screen; \
     "Show as…" picks the screen (car, hot water, media, camera or a device page); the label replaces the \
