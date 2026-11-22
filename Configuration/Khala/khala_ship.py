@@ -826,6 +826,10 @@ def sign_target(apple, cert, bundle, bundle_id, entitlements_path, profile_name,
         summary(f"- Created App Store profile \"{profile_name}\" ({profile['attributes']['uuid']}).")
     content = profile["attributes"]["profileContent"]
     missing, missing_groups = profile_gaps(profile_entitlements(content), entitlements, groups)
+    if NETWORK_EXTENSION in missing:
+        granted = profile_entitlements(content).get("Entitlements", {})
+        summary(f"- {bundle}: profile's Network Extension entitlement is {granted.get(NETWORK_EXTENSION)!r}; "
+                f"profile entitlement keys: {', '.join(sorted(granted))}.")
     steps = []
     if missing_groups:
         steps.append(f"the app group {', '.join(missing_groups)} (the App Store Connect API cannot create or assign "
