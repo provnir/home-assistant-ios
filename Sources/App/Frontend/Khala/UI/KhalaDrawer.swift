@@ -132,9 +132,11 @@ final class KhalaDrawer: NSObject, ObservableObject {
         let newWidth = CGFloat(KhalaDrawerMath.openWidth(container: Double(width)))
         guard newWidth != openWidth else { return }
         openWidth = newWidth
-        if !isSettling, mode == nil {
-            setPosition(isOpen ? openWidth : 0)
-        }
+        guard mode == nil else { return }
+        // A resize is a jump, not a motion (iPhone Duo folding or unfolding, Split View, iPad rotation): a spring
+        // still heading for the old open width would land the card short of, or past, the new one.
+        stopSpring()
+        setPosition(isOpen ? openWidth : 0)
     }
 
     // MARK: Programmatic

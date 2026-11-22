@@ -8,6 +8,8 @@ struct KhalaScreen<Content: View>: View {
     let subtitle: String?
     /// Kept for call-site compatibility; the shell owns the menu button now.
     let onMenu: () -> Void
+    /// How wide the content may run in a regular width (`KhalaColumnMath`); a compact width always uses all of it.
+    var column: KhalaColumnMath.Kind = .readable
     @ViewBuilder let content: () -> Content
 
     var body: some View {
@@ -29,6 +31,7 @@ struct KhalaScreen<Content: View>: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, KhalaTheme.gutter)
+            .khalaColumn(column)
             // Room for the shell's menu button above the title.
             .padding(.top, 9 + 44 + 4)
             .padding(.bottom, 32)
